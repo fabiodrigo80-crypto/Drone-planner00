@@ -757,6 +757,55 @@ function updateMeasureResult(closed=false){
 let gcpFieldPoints = []; // {lat, lng, acc, idx}
 let gcpFieldLayer = null;
 
+// ── PREFISSO FILE (da geocodifica inversa del 1° GCP) ─────────────────────────
+let _missionPrefix = null;
+
+function missionPrefix() {
+  if (_missionPrefix) return _missionPrefix;
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  return 'missione_' + dd + '-' + mm + '-' + d.getFullYear();
+}
+
+async function fetchMissionPrefix(lat, lng) {
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=it', {
+      headers: { 'User-Agent': 'DroneSurveyPlanner/1.0' }
+    });
+    const d = await r.json();
+    const addr = d.address || {};
+    const comune = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || 'loc';
+    const sigle = {'venezia':'VE','treviso':'TV','padova':'PD','vicenza':'VI','verona':'VR','rovigo':'RO','belluno':'BL',
+      'udine':'UD','pordenone':'PN','gorizia':'GO','trieste':'TS','milano':'MI','roma':'RM','torino':'TO',
+      'bologna':'BO','firenze':'FI','napoli':'NA','palermo':'PA','genova':'GE','bari':'BA','cuneo':'CN',
+      'novara':'NO','varese':'VA','como':'CO','bergamo':'BG','brescia':'BS','mantova':'MN','cremona':'CR',
+      'pavia':'PV','lodi':'LO','lecco':'LC','sondrio':'SO','monza':'MB','alessandria':'AL','asti':'AT',
+      'biella':'BI','vercelli':'VC','verbano':'VB','aosta':'AO','imperia':'IM','savona':'SV','genova':'GE',
+      'la spezia':'SP','massa':'MS','lucca':'LU','pistoia':'PT','prato':'PO','livorno':'LI','pisa':'PI',
+      'arezzo':'AR','siena':'SI','grosseto':'GR','perugia':'PG','terni':'TR','ancona':'AN','pesaro':'PU',
+      'macerata':'MC','ascoli':'AP','fermo':'FM','viterbo':'VT','rieti':'RI','frosinone':'FR','latina':'LT',
+      'caserta':'CE','benevento':'BN','avellino':'AV','salerno':'SA','foggia':'FG','bat':'BT','taranto':'TA',
+      'brindisi':'BR','lecce':'LE','potenza':'PZ','matera':'MT','cosenza':'CS','catanzaro':'CZ','vibo':'VV',
+      'reggio calabria':'RC','messina':'ME','catania':'CT','siracusa':'SR','ragusa':'RG','agrigento':'AG',
+      'caltanissetta':'CL','enna':'EN','trapani':'TP','sassari':'SS','nuoro':'NU','cagliari':'CA','oristano':'OR'};
+    let sigla = '';
+    const prov = (addr.county || addr.state || '').toLowerCase();
+    for (const [k,v] of Object.entries(sigle)) { if (prov.includes(k)) { sigla = v; break; } }
+    if (!sigla && addr['ISO3166-2-lvl6']) sigla = addr['ISO3166-2-lvl6'].replace('IT-','');
+    if (!sigla) sigla = prov.replace(/[^a-z]/gi,'').substring(0,2).toUpperCase() || 'IT';
+    const d2 = new Date();
+    const dd = String(d2.getDate()).padStart(2,'0');
+    const mm2 = String(d2.getMonth()+1).padStart(2,'0');
+    const comunePulito = comune.replace(/[^a-zA-Z0-9À-ÿ]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    _missionPrefix = comunePulito + '_' + sigla + '_' + dd + '-' + mm2 + '-' + d2.getFullYear();
+    toast('\u2713 Missione: ' + _missionPrefix.replace(/_/g,' '));
+  } catch(e) {
+    const d2 = new Date();
+    _missionPrefix = 'missione_' + String(d2.getDate()).padStart(2,'0') + '-' + String(d2.getMonth()+1).padStart(2,'0') + '-' + d2.getFullYear();
+  }
+}
+
 function acquireGCP() {
   const btn = document.getElementById('btn-acq-gcp');
   const status = document.getElementById('gcp-gps-status');
@@ -777,6 +826,7 @@ function acquireGCP() {
       const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = Math.round(pos.coords.accuracy);
       const idx = gcpFieldPoints.length + 1;
       gcpFieldPoints.push({ lat, lng, acc, idx, photo: null });
+      if (idx === 1) fetchMissionPrefix(lat, lng); // geocodifica inversa solo al 1° GCP
       renderGCPFieldList();
       renderGCPFieldMap();
       updateGCPExportBtn();
@@ -866,17 +916,32 @@ function onGCPPhotoSelected(input) {
   if (!input.files || !input.files[0]) return;
   if (_gcpPhotoTargetIdx === null || _gcpPhotoTargetIdx >= gcpFieldPoints.length) return;
   const file = input.files[0];
+  const targetIdx = _gcpPhotoTargetIdx;
+  _gcpPhotoTargetIdx = null;
+  input.value = '';
   const reader = new FileReader();
   reader.onload = e => {
-    gcpFieldPoints[_gcpPhotoTargetIdx].photo = e.target.result;
-    gcpFieldPoints[_gcpPhotoTargetIdx].photoName = file.name;
-    renderGCPFieldList();
-    toast(`✓ Foto allegata a GCP ${gcpFieldPoints[_gcpPhotoTargetIdx].idx}`);
-    _gcpPhotoTargetIdx = null;
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.82);
+      gcpFieldPoints[targetIdx].photo = compressed;
+      gcpFieldPoints[targetIdx].photoName = file.name;
+      const kb = Math.round(compressed.length * 0.75 / 1024);
+      renderGCPFieldList();
+      toast('✓ Foto allegata a GCP ' + gcpFieldPoints[targetIdx].idx + ' (' + kb + ' KB)');
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
-  // Reset input per poter selezionare lo stesso file di nuovo se serve
-  input.value = '';
 }
 
 function viewGCPPhoto(i) {
@@ -1391,14 +1456,14 @@ function buildCSVRows(wps,H,gpitch,tint,csize,spd,poiLat,poiLng){
 function exportCSV(idx){
   if(!missionWPs.length||!result)return;const f=result.fuels[idx];
   if(f.wps.length>LITCHI_WP_MAX)toast(`⚠ B${idx+1}: ${f.wps.length} WP > limite Litchi`);
-  const nm=result.fuels.length===1?'rotta_litchi.csv':`rotta_bat_${idx+1}_di_${result.fuels.length}.csv`;
+  const pfx=missionPrefix(); const nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
   dl(buildCSVRows(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd),nm,'text/csv');
   toast(`✓ CSV B${idx+1} (${f.wps.length} WP · ${(f.timeS/60).toFixed(1)} min)`);
 }
 function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast(`⬇ ${result.fuels.length} CSV…`);}
 function exportCrosshatchCSV(idx){
   if(!result||!result.result2)return;const r2=result.result2,f=r2.fuels[idx];
-  dl(buildCSVRows(f.wps,r2.H,r2.gpitch,result.tint,result.csize,r2.spd),`rotta_xhatch_b${idx+1}.csv`,'text/csv');
+  dl(buildCSVRows(f.wps,r2.H,r2.gpitch,result.tint,result.csize,r2.spd),missionPrefix()+'_XH_B'+(idx+1)+'.csv','text/csv');
   toast(`✓ Crosshatch B${idx+1} (${f.wps.length} WP)`);
 }
 
@@ -1406,7 +1471,7 @@ function exportCrosshatchCSV(idx){
 function exportPerimeterCSV(){
   if(!result||!result.perimeterWPs||!result.perimeterWPs.length){toast('⚠ Nessun perimetro');return;}
   const wps=result.perimeterWPs,pc=result.perimeterCentroid,pitch=result.perimeterPitch,tint=result.tint,csize=result.csize,spd=result.perimeterSpd;
-  dl(buildCSVRows(wps,wps[0].alt,pitch,tint,csize,spd,pc?pc.lat:null,pc?pc.lng:null),'rotta_perimetro.csv','text/csv');
+  dl(buildCSVRows(wps,wps[0].alt,pitch,tint,csize,spd,pc?pc.lat:null,pc?pc.lng:null),missionPrefix()+'_perim.csv','text/csv');
   toast(`✓ CSV perimetro (${wps.length} WP · 🎯 heading centroide)`);
 }
 
@@ -1429,7 +1494,7 @@ function exportUnifiedCSV(){
         else if(nxt)hdg=j<seg.length-1?bearing(wp,nxt):bearing(prv,wp);
         rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt||result.H,Math.round(hdg),wp._csize,0,2,wp._gpitch,5,wp._gpitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,pLat,pLng,0,pAM,ph,-1].join(','));
       });
-      dl(rows.join('\n'),splits.length===1?'rotta_unificata.csv':`rotta_unificata_bat${i+1}_di_${splits.length}.csv`,'text/csv');
+      const _pfx=missionPrefix(); dl(rows.join('\n'),splits.length===1?(_pfx+'_unif.csv'):(_pfx+'_unif_B'+(i+1)+'.csv'),'text/csv');
     },i*400);
   });
   toast(`⬇ CSV unificato in ${splits.length} batteria/e`);
@@ -1622,7 +1687,7 @@ function exportLinearCSV(idx){
   if(!linearResult)return;const f=linearResult.fuels[idx],{tint,gpitch,csize,spd}=linearResult,v=Math.min(15,Math.max(0.5,spd)).toFixed(1);
   const rows=[CSV_HDR];
   f.wps.forEach((wp,i)=>{const ph=i===0?-1:tint,nxt=f.wps[i+1]||f.wps[i-1],hdg=nxt?(i<f.wps.length-1?bearing(wp,nxt):bearing(f.wps[i-1],wp)):0;rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt||linearResult.H,Math.round(hdg),csize,0,2,gpitch,5,gpitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,0,0,0,0,ph,-1].join(','));});
-  dl(rows.join('\n'),linearResult.fuels.length===1?'rotta_lineare.csv':`rotta_lin_b${idx+1}_di_${linearResult.fuels.length}.csv`,'text/csv');toast(`✓ CSV lin B${idx+1} (${f.wps.length} WP)`);
+  const _lpfx=missionPrefix(); dl(rows.join('\n'),linearResult.fuels.length===1?(_lpfx+'.csv'):(_lpfx+'_B'+(idx+1)+'.csv'),'text/csv');toast(`✓ CSV lin B${idx+1} (${f.wps.length} WP)`);
 }
 function exportLinearPerimCSV(){
   if(!linearResult||!linearResult.perimWPs||!linearResult.perimWPs.length){toast('⚠ Nessun perimetro lineare');return;}
@@ -1630,7 +1695,7 @@ function exportLinearPerimCSV(){
   const cLat=linearAxis.reduce((s,p)=>s+p.lat,0)/linearAxis.length,cLng=linearAxis.reduce((s,p)=>s+p.lng,0)/linearAxis.length;
   const rows=[CSV_HDR];
   wps.forEach((wp,i)=>{const ph=i===0?-1:tint,hdg=bearing(wp,{lat:cLat,lng:cLng});rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt,Math.round(hdg),csize,0,2,pPitch,5,pPitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,cLat.toFixed(10),cLng.toFixed(10),0,1,ph,-1].join(','));});
-  dl(rows.join('\n'),'rotta_perim_lineare.csv','text/csv');toast(`✓ CSV perim lin (${wps.length} WP · 🎯 heading centroide)`);
+  dl(rows.join('\n'),missionPrefix()+'_perim.csv','text/csv');toast(`✓ CSV perim lin (${wps.length} WP · 🎯 heading centroide)`);
 }
 
 // ── EXPORT CSV CON GCP DI CAMPO ───────────────────────────────────────────────
@@ -1694,7 +1759,7 @@ function exportCSVwithGCP() {
   if (!gcpFieldPoints.length) { toast('⚠ Nessun GCP acquisito'); sw('gcp'); return; }
   const { H, gpitch, tint, csize, spd } = result;
   const csv = buildCSVRowsWithGCP(missionWPs, H, gpitch, tint, csize, spd);
-  dl(csv, 'rotta_con_gcp.csv', 'text/csv');
+  dl(csv, missionPrefix()+'_GCP.csv', 'text/csv');
   toast(`✓ CSV con ${gcpFieldPoints.length} GCP esportato`);
 }
 
@@ -1721,7 +1786,7 @@ function exportKML(){
     const CK=['ff007700','ffcc6600','ff0000cc','ff0000aa'];let sf='';
     linearResult.fuels.forEach((f,fi)=>{const col=CK[fi]||'ff888888',co=f.wps.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt||linearResult.H}`).join('\n');sf+=`<Style id="b${fi}"><LineStyle><color>${col}</color><width>3</width></LineStyle></Style><Folder><name>Batteria ${fi+1}</name><Placemark><name>Rotta</name><styleUrl>#b${fi}</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${co}</coordinates></LineString></Placemark></Folder>`;});
     const ac=linearAxis.map(p=>`${p.lng.toFixed(10)},${p.lat.toFixed(10)},0`).join('\n');
-    dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rilievo Lineare Mini 2</name><Style id="ax"><LineStyle><color>ff0000d9</color><width>2</width></LineStyle></Style><Folder><name>Asse</name><Placemark><name>Asse</name><styleUrl>#ax</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${ac}</coordinates></LineString></Placemark></Folder>${sf}${gcpFolder}</Document></kml>`,'rotta_lineare.kml','application/vnd.google-earth.kml+xml');
+    dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()} — Lineare</name><Style id="ax"><LineStyle><color>ff0000d9</color><width>2</width></LineStyle></Style><Folder><name>Asse</name><Placemark><name>Asse</name><styleUrl>#ax</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${ac}</coordinates></LineString></Placemark></Folder>${sf}${gcpFolder}</Document></kml>`,missionPrefix()+'_lineare.kml','application/vnd.google-earth.kml+xml');
     toast('✓ KML lineare'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));return;
   }
   if(!missionWPs.length||!result){toast('⚠ Prima calcola');return;}
@@ -1729,7 +1794,7 @@ function exportKML(){
   const c1=missionWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${H}`).join('\n');
   let xhKML='';if(crosshatch&&result2){const w2=result2.fuels.flatMap(f=>f.wps),c2=w2.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${result2.H}`).join('\n');xhKML=`<Style id="xh"><LineStyle><color>ff0000aa</color><width>2</width></LineStyle></Style><Folder><name>Crosshatch 2°</name><Placemark><name>XH</name><styleUrl>#xh</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c2}</coordinates></LineString></Placemark></Folder>`;}
   let pKML='';if(result.doPerimeter&&result.perimeterWPs&&result.perimeterWPs.length){const cp=result.perimeterWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt}`).join('\n');pKML=`<Style id="p"><LineStyle><color>ff007700</color><width>2</width></LineStyle></Style><Folder><name>Perimetro</name><Placemark><name>Perim</name><styleUrl>#p</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${cp}</coordinates></LineString></Placemark></Folder>`;}
-  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Survey Mini 2</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,'rotta_survey.kml','application/vnd.google-earth.kml+xml');
+  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
   toast('✓ KML esportato'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));
 }
 
