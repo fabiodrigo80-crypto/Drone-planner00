@@ -239,6 +239,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
     <div id="tabs">
       <button class="tab active" data-tab="area" onclick="sw('area')">Area</button>
       <button class="tab" data-tab="params" onclick="sw('params')">Parametri</button>
+      <button class="tab" data-tab="gcp" onclick="sw('gcp')">📍 GCP</button>
       <button class="tab" data-tab="results" onclick="sw('results')">Risultati</button>
       <button class="tab" data-tab="luce" onclick="sw('luce')">☀ Luce</button>
     </div>
@@ -418,6 +419,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
           <div class="slbl">Esporta</div>
           <div id="export-btns"></div>
           <button class="btn bk" onclick="exportKML()">⬇ Esporta KML Google Earth</button>
+          <div id="export-gcp-row" style="display:none;margin-top:6px">
+            <button class="btn" onclick="exportCSVwithGCP()" style="background:#d94000;color:#fff;border:none">📍 Esporta CSV con GCP di campo (<span id="export-gcp-count">0</span> punti)</button>
+          </div>
           <!-- Cartella salvataggio + Mission Hub -->
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
             <button class="btn bn" id="btn-folder" onclick="pickSaveFolder()" style="flex:1;min-width:140px">
@@ -433,6 +437,45 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
           <div class="slbl">Note</div>
           <div class="ib" id="r-notes"></div>
         </div>
+      </div>
+
+      <!-- TAB GCP -->
+      <div id="t-gcp" class="tc">
+        <div class="ib" style="font-size:12px">Posizionati sopra ogni target GCP e premi il pulsante. Il drone si abbasserà su quei punti durante la missione per scattare foto ravvicinate.<br><strong>Precisione GPS telefono: ±3–8 m</strong> — solo posizionamento approssimativo.</div>
+
+        <div class="slbl">Parametri volo GCP</div>
+        <div class="f">
+          <div class="rv-row"><label>Quota volo sui GCP (AGL)</label><span class="rv" id="gcp-alt-v">20 m</span></div>
+          <input type="range" id="gcp-alt" min="10" max="60" value="20" step="5" oninput="onRng('gcp-alt','gcp-alt-v',' m')">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Sosta sul GCP</label><span class="rv" id="gcp-stay-v">8 s</span></div>
+          <input type="range" id="gcp-stay" min="3" max="20" value="8" step="1" oninput="onRng('gcp-stay','gcp-stay-v',' s')">
+        </div>
+        <div class="ib" style="font-size:11px">💡 Il drone: scende alla quota GCP → sosta → risale alla quota missione e continua. La sosta accumula scatti ravvicinati.</div>
+
+        <div class="slbl">Acquisizione GCP</div>
+        <button class="btn bp" id="btn-acq-gcp" onclick="acquireGCP()" style="background:#d94000;border-color:#d94000;font-size:14px">📍 Acquisisci GCP — usa posizione attuale</button>
+        <div id="gcp-gps-status" class="ib" style="font-size:11px;display:none"></div>
+
+        <!-- Pannello foto immediata — appare dopo acquisizione -->
+        <div id="gcp-photo-prompt" style="display:none;background:#fff8f0;border:2px solid #e07000;border-radius:var(--r);padding:10px;margin-top:8px">
+          <div style="font-size:12px;font-weight:700;color:#a04000;margin-bottom:8px">📷 GCP <span id="gcp-photo-prompt-idx"></span> — allega foto adesso?</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="triggerPhotoForLast()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📷 Sì — scatta / scegli ora</button>
+            <button onclick="dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:2px solid var(--border);background:var(--surf);color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer">Dopo</button>
+          </div>
+        </div>
+
+        <!-- Input file nascosto — riutilizzabile per qualsiasi GCP -->
+        <input type="file" id="gcp-photo-input" accept="image/*" capture="environment" style="display:none" onchange="onGCPPhotoSelected(this)">
+
+        <div class="slbl">GCP acquisiti — <span id="gcp-count">0</span></div>
+        <div id="gcp-list" style="border:2px solid var(--border);border-radius:var(--r);background:var(--surf);max-height:260px;overflow-y:auto;margin-bottom:8px">
+          <div id="gcp-empty" style="padding:12px;text-align:center;color:var(--dim);font-size:12px">Nessun GCP acquisito</div>
+        </div>
+        <button class="btn bn" onclick="clearGCPField()">🗑 Cancella tutti i GCP</button>
+        <div class="ib" style="font-size:11px;margin-top:8px">⚠ I GCP di campo vengono aggiunti ai waypoint Litchi <strong>dopo</strong> il calcolo missione, in fase di export CSV.</div>
       </div>
 
       <!-- TAB LUCE -->
@@ -708,6 +751,203 @@ function updateMeasureResult(closed=false){
     html+=` · <span style="color:var(--dim);font-size:11px">doppio tap per chiudere e calcolare area</span>`;
   }
   document.getElementById('measure-result').innerHTML=html;
+}
+
+// ── GCP DI CAMPO (acquisizione GPS telefono) ──────────────────────────────────
+let gcpFieldPoints = []; // {lat, lng, acc, idx}
+let gcpFieldLayer = null;
+
+function acquireGCP() {
+  const btn = document.getElementById('btn-acq-gcp');
+  const status = document.getElementById('gcp-gps-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Acquisizione GPS…';
+  status.style.display = 'block';
+  status.textContent = 'In attesa del segnale GPS…';
+  dismissPhotoPrompt();
+
+  if (!navigator.geolocation) {
+    toast('⚠ GPS non disponibile su questo dispositivo');
+    btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = Math.round(pos.coords.accuracy);
+      const idx = gcpFieldPoints.length + 1;
+      gcpFieldPoints.push({ lat, lng, acc, idx, photo: null });
+      renderGCPFieldList();
+      renderGCPFieldMap();
+      updateGCPExportBtn();
+      status.textContent = `✓ GCP ${idx} acquisito — precisione ±${acc} m`;
+      status.style.background = '#f0fff4'; status.style.borderColor = '#1a7a00'; status.style.color = '#1a5c00';
+      btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+      toast(`✓ GCP ${idx} acquisito (±${acc} m)`);
+      // Mostra pannello foto immediata
+      showPhotoPrompt(idx);
+    },
+    err => {
+      const msgs = { 1: 'GPS negato — consenti la posizione al browser', 2: 'Posizione non disponibile', 3: 'GPS timeout — riprova' };
+      status.textContent = '⚠ ' + (msgs[err.code] || 'Errore GPS');
+      status.style.background = '#fff5f0'; status.style.borderColor = '#d94000'; status.style.color = '#a03000';
+      btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+      toast('⚠ ' + (msgs[err.code] || 'Errore GPS'));
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  );
+}
+
+function renderGCPFieldList() {
+  const list = document.getElementById('gcp-list');
+  const empty = document.getElementById('gcp-empty');
+  document.getElementById('gcp-count').textContent = gcpFieldPoints.length;
+  if (!gcpFieldPoints.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    list.appendChild(empty);
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = gcpFieldPoints.map((p, i) => `
+    <div style="padding:8px 9px;border-bottom:1px solid var(--surf2)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="background:#d94000;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">${p.idx}</span>
+        <span style="flex:1;font-family:var(--mono);font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}<br><span style="color:var(--dim)">±${p.acc} m</span></span>
+        <button onclick="triggerPhotoFor(${i})" title="Allega foto" style="padding:4px 8px;border-radius:6px;border:1.5px solid #e07000;background:${p.photo?'#e07000':'#fff8f0'};color:${p.photo?'#fff':'#a04000'};font-size:13px;cursor:pointer;flex-shrink:0">${p.photo?'📷✓':'📷'}</button>
+        <button onclick="removeGCPField(${i})" style="padding:3px 8px;border-radius:6px;border:1.5px solid #d94000;background:#fff5f0;color:#d94000;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
+      </div>
+      ${p.photo ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:120px;display:flex;align-items:center;justify-content:center;background:#000">
+        <img src="${p.photo}" style="max-width:100%;max-height:120px;object-fit:contain;display:block" onclick="viewGCPPhoto(${i})">
+      </div>` : ''}
+    </div>`).join('');
+}
+
+function removeGCPField(i) {
+  gcpFieldPoints.splice(i, 1);
+  gcpFieldPoints.forEach((p, j) => p.idx = j + 1);
+  renderGCPFieldList();
+  renderGCPFieldMap();
+  updateGCPExportBtn();
+  toast('GCP rimosso');
+}
+
+// ── FOTO GCP ──────────────────────────────────────────────────────────────────
+let _gcpPhotoTargetIdx = null; // indice in gcpFieldPoints del GCP a cui allegare la foto
+
+function showPhotoPrompt(displayIdx) {
+  const panel = document.getElementById('gcp-photo-prompt');
+  document.getElementById('gcp-photo-prompt-idx').textContent = displayIdx;
+  _gcpPhotoTargetIdx = gcpFieldPoints.length - 1; // ultimo acquisito
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function dismissPhotoPrompt() {
+  const panel = document.getElementById('gcp-photo-prompt');
+  if (panel) panel.style.display = 'none';
+  _gcpPhotoTargetIdx = null;
+}
+
+function triggerPhotoForLast() {
+  // Photo per il GCP appena acquisito (pannello immediato)
+  _gcpPhotoTargetIdx = gcpFieldPoints.length - 1;
+  dismissPhotoPrompt();
+  document.getElementById('gcp-photo-input').click();
+}
+
+function triggerPhotoFor(listIdx) {
+  // Photo per un GCP specifico dalla lista
+  _gcpPhotoTargetIdx = listIdx;
+  document.getElementById('gcp-photo-input').click();
+}
+
+function onGCPPhotoSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  if (_gcpPhotoTargetIdx === null || _gcpPhotoTargetIdx >= gcpFieldPoints.length) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = e => {
+    gcpFieldPoints[_gcpPhotoTargetIdx].photo = e.target.result;
+    gcpFieldPoints[_gcpPhotoTargetIdx].photoName = file.name;
+    renderGCPFieldList();
+    toast(`✓ Foto allegata a GCP ${gcpFieldPoints[_gcpPhotoTargetIdx].idx}`);
+    _gcpPhotoTargetIdx = null;
+  };
+  reader.readAsDataURL(file);
+  // Reset input per poter selezionare lo stesso file di nuovo se serve
+  input.value = '';
+}
+
+function viewGCPPhoto(i) {
+  const p = gcpFieldPoints[i];
+  if (!p || !p.photo) return;
+  // Apre la foto a schermo intero in un overlay temporaneo
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+  ov.innerHTML = `
+    <div style="color:#fff;font-size:13px;font-weight:700">GCP ${p.idx} — ±${p.acc} m</div>
+    <img src="${p.photo}" style="max-width:96vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.6)">
+    <button onclick="this.parentElement.remove()" style="padding:10px 28px;border-radius:24px;border:none;background:#d94000;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✕ Chiudi</button>`;
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+}
+
+// ── EXPORT KML CON FOTO GCP ───────────────────────────────────────────────────
+// Sovrascrive exportKML aggiungendo i segnaposti GCP con balloon foto
+function buildGCPKMLPlacemarks() {
+  if (!gcpFieldPoints.length) return '';
+  return gcpFieldPoints.map(p => {
+    const desc = p.photo
+      ? `<![CDATA[<div style="font-family:sans-serif;font-size:13px"><b>GCP ${p.idx}</b><br>±${p.acc} m<br><img src="${p.photo}" style="max-width:300px;margin-top:8px;border-radius:6px"></div>]]>`
+      : `<![CDATA[<b>GCP ${p.idx}</b><br>±${p.acc} m<br><i>Nessuna foto allegata</i>]]>`;
+    return `<Placemark>
+  <name>GCP ${p.idx}</name>
+  <description>${desc}</description>
+  <Style><IconStyle><color>ff0000d9</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/target.png</href></Icon></IconStyle></Style>
+  <Point><coordinates>${p.lng.toFixed(10)},${p.lat.toFixed(10)},0</coordinates></Point>
+</Placemark>`;
+  }).join('\n');
+}
+
+function clearGCPField() {
+  gcpFieldPoints = [];
+  renderGCPFieldList();
+  if (gcpFieldLayer) { map.removeLayer(gcpFieldLayer); gcpFieldLayer = null; }
+  document.getElementById('gcp-gps-status').style.display = 'none';
+  updateGCPExportBtn();
+  toast('GCP cancellati');
+}
+
+function renderGCPFieldMap() {
+  if (gcpFieldLayer) { map.removeLayer(gcpFieldLayer); gcpFieldLayer = null; }
+  if (!gcpFieldPoints.length) return;
+  const grp = L.layerGroup();
+  gcpFieldPoints.forEach(p => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:28px;height:28px;border-radius:50%;background:#d94000;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">${p.idx}</div>`,
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    });
+    L.marker([p.lat, p.lng], { icon, zIndexOffset: 900 })
+      .bindTooltip(`GCP ${p.idx} — ±${p.acc} m`, { permanent: false })
+      .addTo(grp);
+    if (p.acc > 0) L.circle([p.lat, p.lng], { radius: p.acc, color: '#d94000', fillColor: '#d94000', fillOpacity: 0.08, weight: 1.5, dashArray: '4,4' }).addTo(grp);
+  });
+  gcpFieldLayer = grp.addTo(map);
+}
+
+// Costruisce i waypoint GCP da inserire nel CSV (discesa, sosta, risalita)
+function buildGCPFieldWPs(missionAlt, gcpAlt, gcpStay) {
+  if (!gcpFieldPoints.length) return [];
+  const wps = [];
+  gcpFieldPoints.forEach(p => {
+    // WP discesa: quota GCP
+    wps.push({ lat: p.lat, lng: p.lng, alt: gcpAlt, _isGCP: true, _stay: gcpStay, _phase: 'down' });
+    // WP risalita: stessa posizione, torna a quota missione
+    wps.push({ lat: p.lat, lng: p.lng, alt: missionAlt, _isGCP: true, _stay: 0, _phase: 'up' });
+  });
+  return wps;
 }
 
 // ── DFLIGHT ───────────────────────────────────────────────────────────────────
@@ -1108,6 +1348,7 @@ function compute(){
   renderGCPs(result.gcpData);
   document.getElementById('res-empty').style.display='none';document.getElementById('res-content').style.display='block';sw('results');
   toast(`✓ ${wps.length} WP · ${lines.length} str · ${fuels.length} bat`+(crosshatch&&result2?` + ${result2.nStrips} XH`:''));
+  updateGCPExportBtn();
 }
 
 // ── RENDER FUEL PLAN ──────────────────────────────────────────────────────────
@@ -1392,23 +1633,104 @@ function exportLinearPerimCSV(){
   dl(rows.join('\n'),'rotta_perim_lineare.csv','text/csv');toast(`✓ CSV perim lin (${wps.length} WP · 🎯 heading centroide)`);
 }
 
+// ── EXPORT CSV CON GCP DI CAMPO ───────────────────────────────────────────────
+function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
+  const gcpAlt = +document.getElementById('gcp-alt').value;
+  const gcpStay = +document.getElementById('gcp-stay').value;
+  const gcpWPs = buildGCPFieldWPs(H, gcpAlt, gcpStay);
+  if (!gcpWPs.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+
+  // Intercala i GCP nel percorso: per ogni GCP trova il WP più vicino e li inserisce subito dopo
+  const combined = [...wps];
+  // Inserimento in ordine inverso per non spostare gli indici
+  const insertions = [];
+  gcpWPs.forEach((gp, gi) => {
+    // Trova il WP più vicino
+    let minD = Infinity, minI = 0;
+    wps.forEach((wp, i) => {
+      const d = (wp.lat - gp.lat) ** 2 + (wp.lng - gp.lng) ** 2;
+      if (d < minD) { minD = d; minI = i; }
+    });
+    insertions.push({ after: minI, wp: gp, gi });
+  });
+  // Ordina per indice decrescente e inserisce
+  insertions.sort((a, b) => b.after - a.after);
+  const finalWPs = [...wps];
+  insertions.forEach(ins => {
+    // Inserisce: discesa poi risalita (già in coppia in gcpWPs)
+    // gcpWPs è già [down0, up0, down1, up1, ...] quindi prendi le coppie
+  });
+
+  // Approccio più semplice: appende i GCP alla fine del 1° passaggio
+  // Il drone finisce le strisciate, poi va su ogni GCP (discende, sosta, risale), poi continua
+  const v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  const rows = [CSV_HDR];
+
+  // Strisciate normali
+  wps.forEach((wp, i) => {
+    const ph = i === 0 ? -1 : tint, nxt = wps[i + 1] || wps[i - 1];
+    let hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
+    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg), csize, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, ph, -1].join(','));
+  });
+
+  // Waypoint GCP (coppie: discesa + risalita)
+  for (let gi = 0; gi < gcpFieldPoints.length; gi++) {
+    const p = gcpFieldPoints[gi];
+    const prevWP = wps[wps.length - 1];
+    // WP avvicinamento a quota missione sopra il GCP (dall'ultimo WP)
+    const hdgToGCP = bearing(prevWP, p);
+    // 1) Discesa alla quota GCP — sosta come actiontype1=0 (stay), param=gcpStay*1000ms
+    const stayMs = gcpStay * 1000;
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP), 0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, tint, -1].join(','));
+    // 2) Risalita alla quota missione
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP), 0, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, -1, -1].join(','));
+  }
+
+  return rows.join('\n');
+}
+
+function exportCSVwithGCP() {
+  if (!missionWPs.length || !result) { toast('⚠ Prima calcola la missione'); return; }
+  if (!gcpFieldPoints.length) { toast('⚠ Nessun GCP acquisito'); sw('gcp'); return; }
+  const { H, gpitch, tint, csize, spd } = result;
+  const csv = buildCSVRowsWithGCP(missionWPs, H, gpitch, tint, csize, spd);
+  dl(csv, 'rotta_con_gcp.csv', 'text/csv');
+  toast(`✓ CSV con ${gcpFieldPoints.length} GCP esportato`);
+}
+
+function updateGCPExportBtn() {
+  const row = document.getElementById('export-gcp-row');
+  const cnt = document.getElementById('export-gcp-count');
+  if (!row) return;
+  if (gcpFieldPoints.length > 0 && result) {
+    row.style.display = 'block';
+    if (cnt) cnt.textContent = gcpFieldPoints.length;
+  } else {
+    row.style.display = 'none';
+  }
+}
+
 // ── EXPORT KML ────────────────────────────────────────────────────────────────
 function exportKML(){
+  const gcpFolder = gcpFieldPoints.length
+    ? `<Folder><name>GCP di campo</name>${buildGCPKMLPlacemarks()}</Folder>`
+    : '';
+
   if(surveyMode==='linear'){
     if(!linearResult||!linearResultWPs.length){toast('⚠ Prima calcola');return;}
     const CK=['ff007700','ffcc6600','ff0000cc','ff0000aa'];let sf='';
     linearResult.fuels.forEach((f,fi)=>{const col=CK[fi]||'ff888888',co=f.wps.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt||linearResult.H}`).join('\n');sf+=`<Style id="b${fi}"><LineStyle><color>${col}</color><width>3</width></LineStyle></Style><Folder><name>Batteria ${fi+1}</name><Placemark><name>Rotta</name><styleUrl>#b${fi}</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${co}</coordinates></LineString></Placemark></Folder>`;});
     const ac=linearAxis.map(p=>`${p.lng.toFixed(10)},${p.lat.toFixed(10)},0`).join('\n');
-    dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rilievo Lineare Mini 2</name><Style id="ax"><LineStyle><color>ff0000d9</color><width>2</width></LineStyle></Style><Folder><name>Asse</name><Placemark><name>Asse</name><styleUrl>#ax</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${ac}</coordinates></LineString></Placemark></Folder>${sf}</Document></kml>`,'rotta_lineare.kml','application/vnd.google-earth.kml+xml');
-    toast('✓ KML lineare');return;
+    dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Rilievo Lineare Mini 2</name><Style id="ax"><LineStyle><color>ff0000d9</color><width>2</width></LineStyle></Style><Folder><name>Asse</name><Placemark><name>Asse</name><styleUrl>#ax</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${ac}</coordinates></LineString></Placemark></Folder>${sf}${gcpFolder}</Document></kml>`,'rotta_lineare.kml','application/vnd.google-earth.kml+xml');
+    toast('✓ KML lineare'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));return;
   }
   if(!missionWPs.length||!result){toast('⚠ Prima calcola');return;}
   const{H,result2,crosshatch}=result;
   const c1=missionWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${H}`).join('\n');
   let xhKML='';if(crosshatch&&result2){const w2=result2.fuels.flatMap(f=>f.wps),c2=w2.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${result2.H}`).join('\n');xhKML=`<Style id="xh"><LineStyle><color>ff0000aa</color><width>2</width></LineStyle></Style><Folder><name>Crosshatch 2°</name><Placemark><name>XH</name><styleUrl>#xh</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c2}</coordinates></LineString></Placemark></Folder>`;}
   let pKML='';if(result.doPerimeter&&result.perimeterWPs&&result.perimeterWPs.length){const cp=result.perimeterWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt}`).join('\n');pKML=`<Style id="p"><LineStyle><color>ff007700</color><width>2</width></LineStyle></Style><Folder><name>Perimetro</name><Placemark><name>Perim</name><styleUrl>#p</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${cp}</coordinates></LineString></Placemark></Folder>`;}
-  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Survey Mini 2</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}</Document></kml>`,'rotta_survey.kml','application/vnd.google-earth.kml+xml');
-  toast('✓ KML esportato');
+  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Survey Mini 2</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,'rotta_survey.kml','application/vnd.google-earth.kml+xml');
+  toast('✓ KML esportato'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));
 }
 
 // ── TAB LUCE ──────────────────────────────────────────────────────────────────
