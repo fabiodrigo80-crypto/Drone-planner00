@@ -462,13 +462,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
         <div id="gcp-photo-prompt" style="display:none;background:#fff8f0;border:2px solid #e07000;border-radius:var(--r);padding:10px;margin-top:8px">
           <div style="font-size:12px;font-weight:700;color:#a04000;margin-bottom:8px">📷 GCP <span id="gcp-photo-prompt-idx"></span> — allega foto adesso?</div>
           <div style="display:flex;gap:8px">
-            <button onclick="triggerPhotoForLast()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📷 Sì — scatta / scegli ora</button>
+            <label for="gcp-photo-input" onclick="setGCPPhotoTargetLast();dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">📷 Sì — scatta / scegli ora</label>
             <button onclick="dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:2px solid var(--border);background:var(--surf);color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer">Dopo</button>
           </div>
         </div>
 
         <!-- Input file nascosto — riutilizzabile per qualsiasi GCP -->
-        <input type="file" id="gcp-photo-input" style="display:none" onchange="onGCPPhotoSelected(this)">
+        <input type="file" id="gcp-photo-input" accept="image/*" style="position:fixed;top:-9999px;left:-9999px;opacity:0;width:1px;height:1px" onchange="onGCPPhotoSelected(this)">
 
         <div class="slbl">GCP acquisiti — <span id="gcp-count">0</span></div>
         <div id="gcp-list" style="border:2px solid var(--border);border-radius:var(--r);background:var(--surf);max-height:260px;overflow-y:auto;margin-bottom:8px">
@@ -864,7 +864,7 @@ function renderGCPFieldList() {
       <div style="display:flex;align-items:center;gap:8px;font-size:12px">
         <span style="background:#d94000;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">${p.idx}</span>
         <span style="flex:1;font-family:var(--mono);font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}<br><span style="color:var(--dim)">±${p.acc} m</span></span>
-        <button onclick="triggerPhotoFor(${i})" title="Allega foto" style="padding:4px 8px;border-radius:6px;border:1.5px solid #e07000;background:${p.photo?'#e07000':'#fff8f0'};color:${p.photo?'#fff':'#a04000'};font-size:13px;cursor:pointer;flex-shrink:0">${p.photo?'📷✓':'📷'}</button>
+        <label for="gcp-photo-input" onclick="setGCPPhotoTarget(${i})" title="Allega foto" style="padding:4px 8px;border-radius:6px;border:1.5px solid #e07000;background:${p.photo?'#e07000':'#fff8f0'};color:${p.photo?'#fff':'#a04000'};font-size:13px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center">${p.photo?'📷✓':'📷'}</label>
         <button onclick="removeGCPField(${i})" style="padding:3px 8px;border-radius:6px;border:1.5px solid #d94000;background:#fff5f0;color:#d94000;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
       </div>
       ${p.photo ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:120px;display:flex;align-items:center;justify-content:center;background:#000">
@@ -899,18 +899,18 @@ function dismissPhotoPrompt() {
   _gcpPhotoTargetIdx = null;
 }
 
-function triggerPhotoForLast() {
-  // Photo per il GCP appena acquisito (pannello immediato)
+// Setta il target GCP prima che il label nativo apra l'input
+function setGCPPhotoTargetLast() {
   _gcpPhotoTargetIdx = gcpFieldPoints.length - 1;
-  dismissPhotoPrompt();
-  document.getElementById('gcp-photo-input').click();
 }
 
-function triggerPhotoFor(listIdx) {
-  // Photo per un GCP specifico dalla lista
+function setGCPPhotoTarget(listIdx) {
   _gcpPhotoTargetIdx = listIdx;
-  document.getElementById('gcp-photo-input').click();
 }
+
+// Mantenute per compatibilità
+function triggerPhotoForLast() { setGCPPhotoTargetLast(); dismissPhotoPrompt(); }
+function triggerPhotoFor(listIdx) { setGCPPhotoTarget(listIdx); }
 
 function onGCPPhotoSelected(input) {
   if (!input.files || !input.files[0]) return;
