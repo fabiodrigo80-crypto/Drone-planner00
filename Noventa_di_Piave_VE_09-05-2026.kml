@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Noventa_di_Piave_VE_09-05-2026</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (30m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>12.5353614927,45.6583464667,30
+12.5353313436,45.6583961097,30
+12.5353011945,45.6584457527,30
+12.5352710455,45.6584953957,30
+12.5352408964,45.6585450387,30
+12.5353428962,45.6585668572,30
+12.5353722559,45.6585185139,30
+12.5354016156,45.6584701706,30
+12.5354309754,45.6584218274,30
+12.5354603351,45.6583734841,30
+12.5355591775,45.6584005015,30
+12.5355306071,45.6584475450,30
+12.5355020367,45.6584945886,30
+12.5354734664,45.6585416321,30
+12.5354448960,45.6585886757,30
+12.5355468958,45.6586104942,30
+12.5355746768,45.6585647503,30
+12.5356024579,45.6585190065,30
+12.5356302389,45.6584732627,30
+12.5356580199,45.6584275188,30</coordinates></LineString></Placemark></Folder><Folder><name>GCP di campo</name><Placemark>
+  <name>GCP 1</name>
+  <description><![CDATA[<b>GCP 1</b><br>±4 m<br><i>Nessuna foto allegata</i>]]></description>
+  <Style><IconStyle><color>ff0000d9</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/target.png</href></Icon></IconStyle></Style>
+  <Point><coordinates>12.5354150000,45.6585433000,0</coordinates></Point>
+</Placemark></Folder></Document></kml>
