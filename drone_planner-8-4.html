@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Drone Planner">
+<meta name="application-name" content="Drone Planner">
+<meta name="theme-color" content="#0066cc">
+<title>Drone Survey Planner — Mini 2</title>
+<script>
+// Genera icona SVG inline e crea manifest PWA dinamicamente
+(function(){
+  // SVG icona: drone stilizzato su sfondo blu
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <rect width="512" height="512" rx="100" fill="#0066cc"/>
+    <!-- bracci diagonali -->
+    <line x1="110" y1="110" x2="210" y2="210" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+    <line x1="402" y1="110" x2="302" y2="210" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+    <line x1="110" y1="402" x2="210" y2="302" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+    <line x1="402" y1="402" x2="302" y2="302" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+    <!-- rotori -->
+    <ellipse cx="100" cy="100" rx="62" ry="22" fill="none" stroke="#7ec8ff" stroke-width="14" stroke-linecap="round"/>
+    <ellipse cx="412" cy="100" rx="62" ry="22" fill="none" stroke="#7ec8ff" stroke-width="14" stroke-linecap="round"/>
+    <ellipse cx="100" cy="412" rx="62" ry="22" fill="none" stroke="#7ec8ff" stroke-width="14" stroke-linecap="round"/>
+    <ellipse cx="412" cy="412" rx="62" ry="22" fill="none" stroke="#7ec8ff" stroke-width="14" stroke-linecap="round"/>
+    <!-- corpo centrale -->
+    <rect x="210" y="210" width="92" height="92" rx="18" fill="#ffffff"/>
+    <!-- simbolo fotocamera -->
+    <rect x="228" y="228" width="56" height="42" rx="8" fill="#0066cc"/>
+    <circle cx="256" cy="249" r="13" fill="#7ec8ff"/>
+    <circle cx="256" cy="249" r="7" fill="#ffffff"/>
+    <!-- griglia survey in basso -->
+    <line x1="160" y1="430" x2="352" y2="430" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.7"/>
+    <line x1="180" y1="450" x2="332" y2="450" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.5"/>
+    <line x1="200" y1="470" x2="312" y2="470" stroke="#ffffff" stroke-width="8" stroke-linecap="round" opacity="0.3"/>
+  </svg>`;
+  const svgBlob='data:image/svg+xml;base64,'+btoa(svg);
+  // Apple touch icon
+  const appleLink=document.createElement('link');
+  appleLink.rel='apple-touch-icon';appleLink.href=svgBlob;
+  document.head.appendChild(appleLink);
+  // Favicon
+  const favLink=document.createElement('link');
+  favLink.rel='icon';favLink.type='image/svg+xml';favLink.href=svgBlob;
+  document.head.appendChild(favLink);
+  // Manifest PWA inline
+  const manifest={
+    name:'Drone Survey Planner',short_name:'Drone Planner',
+    description:'Pianificatore voli fotogrammetrici DJI Mini 2',
+    start_url:'/Drone-planner00/drone_planner-8.html',display:'standalone',
+    background_color:'#0066cc',theme_color:'#0066cc',
+    orientation:'any',
+    icons:[
+      {src:svgBlob,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}
+    ]
+  };
+  const mLink=document.createElement('link');
+  mLink.rel='manifest';
+  mLink.href='data:application/manifest+json;base64,'+btoa(JSON.stringify(manifest));
+  document.head.appendChild(mLink);
+})();
+</script>
+<style>
+#mode-switcher{display:flex;gap:6px;margin-bottom:10px}
+.mode-btn{flex:1;padding:9px 4px;border-radius:var(--r);font-family:var(--sans);font-size:12px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;border:2px solid var(--border);background:var(--surf2);color:var(--dim);cursor:pointer;transition:.15s;text-align:center}
+.mode-btn.active{background:var(--acc);border-color:var(--acc);color:#fff;box-shadow:var(--shadow)}
+.mode-btn:hover:not(.active){border-color:var(--acc);color:var(--acc)}
+#linear-params{display:none}
+#linear-params.on{display:block}
+#polygon-draw{display:block}
+#polygon-draw.off{display:none}
+#linear-draw{display:none}
+#linear-draw.on{display:block}
+.luce-surf-btn{padding:7px 11px;border-radius:20px;border:2px solid var(--border);background:var(--surf2);color:var(--txt2);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+.luce-surf-btn.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.luce-surf-btn:hover:not(.active){border-color:var(--acc);color:var(--acc)}
+#basemap-label{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:800;background:rgba(255,255,255,.88);border:1.5px solid var(--border);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;color:var(--txt2);pointer-events:none;box-shadow:var(--shadow);letter-spacing:.04em;text-transform:uppercase;transition:opacity .3s}
+#measure-panel{position:absolute;bottom:0;left:0;right:0;z-index:900;background:var(--surf);border-top:2px solid #0066cc;box-shadow:0 -4px 16px rgba(0,0,0,.15);display:none}
+#measure-panel.on{display:block}
+#measure-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px 7px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px}
+#measure-result{padding:10px 14px;font-size:13px;color:var(--txt);line-height:1.8;min-height:44px}
+#measure-result strong{color:var(--acc);font-size:15px}
+.msr-btn{padding:3px 10px;border-radius:8px;border:1.5px solid var(--border);background:var(--surf2);font-size:11px;font-weight:600;color:var(--txt2);cursor:pointer}</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f0f4f8;--surf:#ffffff;--surf2:#e8edf3;--border:#c8d4e0;--border2:#b0bec8;
+  --acc:#0066cc;--acc-h:#0052a3;--acc2:#d94000;--acc3:#1a7a00;--acc4:#8b6000;
+  --txt:#1a2332;--txt2:#3d5166;--dim:#6b7f90;
+  --panel:340px;--r:8px;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;
+  --shadow:0 2px 8px rgba(0,0,0,.12);--shadow-lg:0 4px 16px rgba(0,0,0,.18);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:14px}
+#app{display:flex;height:100vh;height:calc(var(--vh,1vh)*100);width:100vw}
+#mw{flex:1;position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+#pnl{width:var(--panel);min-width:var(--panel);background:var(--surf);border-left:2px solid var(--border);display:flex;flex-direction:column;overflow:hidden;z-index:1000;box-shadow:var(--shadow-lg)}
+@media(max-width:768px){
+  #app{flex-direction:column}
+  #mw{height:calc(var(--vh,1vh)*44);flex:none}
+  #pnl{width:100%;min-width:100%;height:calc(var(--vh,1vh)*56);border-left:none;border-top:3px solid var(--acc)}
+}
+#map-controls{position:absolute;top:10px;right:10px;z-index:800;display:flex;flex-direction:column;gap:6px}
+.mc-btn{width:48px;height:48px;border-radius:10px;background:var(--surf);border:2px solid var(--border);color:var(--txt);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow);transition:all .2s}
+.mc-btn:active{transform:scale(.93)}
+.mc-btn.active{background:var(--acc);border-color:var(--acc);color:#fff}
+.mc-btn.gps-active{background:#1a7a00;border-color:#1a7a00;color:#fff}
+.mc-btn.dflight-active{background:#c0000a;border-color:#8a0007;color:#fff}
+#dflight-legend{position:absolute;bottom:60px;left:10px;z-index:800;background:var(--surf);border:2px solid var(--border);border-radius:var(--r);padding:10px 12px;font-size:11px;box-shadow:var(--shadow);max-width:230px;display:none}
+#dflight-legend.on{display:block}
+#dflight-legend .dl-title{font-weight:700;font-size:12px;color:#c0000a;margin-bottom:6px}
+#dflight-legend .dl-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;font-size:11px;color:var(--txt2)}
+#dflight-legend .dl-dot{width:14px;height:14px;border-radius:3px;flex-shrink:0;border:1px solid rgba(0,0,0,.2)}
+#dflight-legend .dl-note{margin-top:6px;font-size:10px;color:var(--dim);border-top:1px solid var(--border);padding-top:6px;line-height:1.5}
+#phdr{padding:12px 16px 10px;border-bottom:2px solid var(--border);background:var(--acc);flex-shrink:0}
+#phdr h1{font-size:15px;font-weight:700;letter-spacing:.02em;color:#fff;text-transform:uppercase}
+#phdr .sub{font-size:11px;color:rgba(255,255,255,.8);margin-top:2px}
+#tabs{display:flex;flex-shrink:0;border-bottom:2px solid var(--border);background:var(--surf2)}
+.tab{flex:1;padding:10px 4px;font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--dim);border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;transition:all .2s}
+.tab.active{color:var(--acc);border-bottom-color:var(--acc);background:var(--surf)}
+.tab:hover:not(.active){color:var(--txt2);background:var(--bg)}
+#pbody{flex:1;overflow-y:auto;padding:14px;padding-bottom:max(20px,env(safe-area-inset-bottom));-webkit-overflow-scrolling:touch}
+#pbody::-webkit-scrollbar{width:4px}
+#pbody::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.tc{display:none}.tc.active{display:block}
+.slbl{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--acc);margin-bottom:8px;margin-top:16px;display:flex;align-items:center;gap:6px}
+.slbl:first-child{margin-top:0}
+.slbl::after{content:'';flex:1;height:2px;background:var(--surf2)}
+.f{margin-bottom:10px}
+.f label{display:block;font-size:12px;font-weight:500;color:var(--txt2);margin-bottom:4px}
+.f input[type=text]{width:100%;background:var(--surf);border:2px solid var(--border);color:var(--txt);font-family:var(--sans);font-size:14px;padding:9px 11px;border-radius:var(--r);outline:none;transition:border-color .2s}
+.f input[type=text]:focus{border-color:var(--acc)}
+.f input[type=range]{width:100%;accent-color:var(--acc);height:6px;cursor:pointer;margin-top:2px;display:block}
+.rv-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;gap:8px}
+.rv-row label{font-size:12px;font-weight:500;color:var(--txt2);margin:0;flex:1;min-width:0}
+.rv{font-size:13px;font-weight:700;font-family:var(--mono);background:var(--acc);color:#fff;padding:1px 8px;border-radius:12px;white-space:nowrap;flex-shrink:0}
+.btn{width:100%;padding:12px;border:none;border-radius:var(--r);font-family:var(--sans);font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .15s;margin-bottom:8px;box-shadow:var(--shadow)}
+.btn:active{transform:scale(.97);box-shadow:none}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:none}
+.bp{background:var(--acc);color:#fff}.bp:hover{background:var(--acc-h)}
+.bd{background:#fff;border:2px solid #d94000;color:#d94000}.bd:hover{background:#fff5f0}
+.bs{background:#1a7a00;color:#fff}.bs:hover{background:#145e00}
+.bk{background:#7a5a00;color:#fff}.bk:hover{background:#5c4400}
+.bn{background:var(--surf2);color:var(--txt2);border:2px solid var(--border)}.bn:hover{border-color:var(--acc);color:var(--acc)}
+#dstat{font-size:12px;font-weight:600;color:#d94000;padding:8px 12px;background:#fff5f0;border:2px solid #d94000;border-radius:var(--r);margin-bottom:10px;text-align:center;display:none}
+#dstat.on{display:block}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.sc{background:var(--surf2);border:2px solid var(--border);border-radius:var(--r);padding:10px}
+.sc .v{font-size:20px;font-weight:700;color:var(--acc);font-family:var(--mono);line-height:1}
+.sc .u{font-size:10px;color:var(--dim);margin-top:1px}
+.sc .l{font-size:10px;font-weight:600;color:var(--txt2);letter-spacing:.04em;margin-top:4px;text-transform:uppercase}
+#wplist{max-height:150px;overflow-y:auto;border:2px solid var(--border);border-radius:var(--r);background:var(--surf)}
+.wpr{display:flex;align-items:center;padding:5px 8px;border-bottom:1px solid var(--surf2);font-size:12px}
+.wpr:last-child{border-bottom:none}
+.wpi{color:var(--acc);font-weight:700;width:22px;font-family:var(--mono)}
+.fuel-card{background:var(--surf2);border:2px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.fuel-badge{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0;color:#fff}
+.fuel-info{flex:1;min-width:0}
+.fuel-info .fi-title{font-size:12px;font-weight:700;color:var(--txt)}
+.fuel-info .fi-sub{font-size:11px;color:var(--txt2);margin-top:2px;font-family:var(--mono)}
+.fuel-over{border-color:#d94000;background:#fff5f0}
+.fuel-over .fi-title{color:#d94000}
+.bs1{background:#1a7a00;color:#fff}.bs1:hover{background:#145e00}
+.bs2{background:#0066cc;color:#fff}.bs2:hover{background:#0052a3}
+.bs3{background:#8b6000;color:#fff}.bs3:hover{background:#6a4900}
+.bs4{background:#cc0000;color:#fff}.bs4:hover{background:#a80000}
+.ib{background:var(--surf2);border:2px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:8px;font-size:12px;color:var(--txt2);line-height:1.7}
+.ib strong{color:var(--txt);font-weight:700}
+.wb{background:#fff5f0;border:2px solid #d94000;border-radius:var(--r);padding:10px;margin-bottom:8px;font-size:12px;color:#a03000;line-height:1.5;font-weight:500}
+.ob{background:#f0fff4;border:2px solid #1a7a00;border-radius:var(--r);padding:10px;margin-bottom:8px;font-size:12px;color:#1a5c00;line-height:1.5;font-weight:500}
+#mcross{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:700;display:none}
+#mcross::before,#mcross::after{content:'';position:absolute;background:#d94000}
+#mcross::before{width:28px;height:2px;top:0;left:-14px}
+#mcross::after{width:2px;height:28px;left:0;top:-14px}
+#mcross.on{display:block}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(70px);background:var(--txt);color:#fff;font-size:13px;font-weight:500;padding:10px 20px;border-radius:24px;z-index:9999;transition:transform .3s;white-space:nowrap;box-shadow:var(--shadow-lg)}
+#toast.on{transform:translateX(-50%) translateY(0)}
+.leaflet-control-zoom{border:2px solid var(--border)!important;border-radius:8px!important;overflow:hidden;box-shadow:var(--shadow)!important}
+.leaflet-control-zoom a{background:var(--surf)!important;color:var(--txt)!important;border-color:var(--border)!important;font-size:16px!important;width:36px!important;height:36px!important;line-height:36px!important}
+.leaflet-tooltip{background:var(--surf)!important;border:2px solid var(--acc)!important;color:var(--acc)!important;font-family:var(--mono)!important;font-size:10px!important;font-weight:600!important;padding:2px 6px!important;border-radius:4px!important;box-shadow:var(--shadow)!important}
+.leaflet-tooltip::before{display:none!important}
+.dflight-tip{background:var(--surf)!important;border:2px solid var(--acc)!important;color:var(--txt)!important;font-family:var(--sans)!important;font-size:11px!important;padding:4px 8px!important;border-radius:6px!important;box-shadow:var(--shadow)!important;line-height:1.5!important}
+.dflight-tip::before{display:none!important}
+#dflight-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center}
+#dflight-modal-box{background:var(--surf);border:2px solid var(--border);border-radius:12px;padding:20px;width:min(340px,92vw);box-shadow:var(--shadow-lg)}
+#dflight-modal-box h2{font-size:15px;font-weight:700;color:var(--txt);margin-bottom:6px}
+#dflight-modal-box p{font-size:12px;color:var(--txt2);line-height:1.6;margin-bottom:12px}
+#dflight-modal-box a{color:var(--acc)}
+#dflight-key-input{width:100%;background:var(--surf);border:2px solid var(--border);color:var(--txt);font-family:var(--mono);font-size:13px;padding:9px 11px;border-radius:var(--r);outline:none;margin-bottom:10px}
+#dflight-key-input:focus{border-color:var(--acc)}
+.dflight-modal-btns{display:flex;gap:8px}
+.dflight-modal-btns button{flex:1;padding:10px;border:none;border-radius:var(--r);font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:.15s}
+#dflight-btn-save{background:var(--acc);color:#fff}
+#dflight-btn-cancel{background:var(--surf2);color:var(--txt2);border:2px solid var(--border)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="mw">
+    <div id="map"></div>
+    <div id="mcross"></div>
+    <div id="map-controls">
+      <button class="mc-btn" id="btn-basemap" onclick="cycleBasemap()" title="Cambia mappa di sfondo">🛰</button>
+      <button class="mc-btn" id="btn-gps" onclick="toggleGPS()" title="La mia posizione">📍</button>
+      <button class="mc-btn" id="btn-dflight" onclick="toggleDFlight()" title="Zone DFlight">🚫</button>
+      <button class="mc-btn" id="btn-measure" onclick="toggleMeasure()" title="Misura distanze/aree">📏</button>
+      <button class="mc-btn" id="btn-footprint" onclick="toggleFootprint()" title="Mostra impronte fotografiche">📷</button>
+    </div>
+    <div id="basemap-label">Mappa</div>
+    <div id="dflight-legend">
+      <div class="dl-title">🚫 Zone DFlight — solo visuale</div>
+      <div class="dl-row"><div class="dl-dot" style="background:rgba(192,0,10,.55)"></div> Zona vietata / CTR</div>
+      <div class="dl-row"><div class="dl-dot" style="background:rgba(255,140,0,.50)"></div> Zona limitata / ATZ</div>
+      <div class="dl-row"><div class="dl-dot" style="background:rgba(255,210,0,.50)"></div> Zona avviso / pericolo</div>
+      <div class="dl-row"><div class="dl-dot" style="background:rgba(0,120,200,.40)"></div> Zona riservata / D/R</div>
+      <div class="dl-note">⚠ Solo orientativo. Verifica su <strong>d-flight.enac.gov.it</strong>.</div>
+    </div>
+    <!-- Impronte fotografiche — gestito via JS -->
+    <!-- Misura distanze/aree -->
+    <div id="measure-panel">
+      <div id="measure-header">
+        <span>📏 Misura</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="msr-btn" onclick="clearMeasure()">🗑 Reset</button>
+          <button class="msr-btn" onclick="toggleMeasure()">✕</button>
+        </div>
+      </div>
+      <div id="measure-result">Tocca la mappa per aggiungere punti · doppio tap per chiudere l'area</div>
+    </div>
+  </div>
+
+  <div id="pnl">
+    <div id="phdr"><h1>Drone Survey Planner</h1><div class="sub">DJI Mini 2 · Litchi CSV</div></div>
+    <div id="tabs">
+      <button class="tab active" data-tab="area" onclick="sw('area')">Area</button>
+      <button class="tab" data-tab="params" onclick="sw('params')">Parametri</button>
+      <button class="tab" data-tab="gcp" onclick="sw('gcp')">📍 GCP</button>
+      <button class="tab" data-tab="results" onclick="sw('results')">Risultati</button>
+      <button class="tab" data-tab="luce" onclick="sw('luce')">☀ Luce</button>
+    </div>
+    <div id="pbody">
+
+      <!-- TAB AREA -->
+      <div id="t-area" class="tc active">
+        <div id="mode-switcher">
+          <button class="mode-btn active" id="btn-mode-poly" onclick="setMode('polygon')">▪ Poligono (area)</button>
+          <button class="mode-btn" id="btn-mode-linear" onclick="setMode('linear')">〰 Lineare (fiume)</button>
+        </div>
+        <div id="polygon-draw">
+          <div class="slbl">Disegno area</div>
+          <div id="dstat">✏ Tocca la mappa per i vertici · Doppio tap = chiudi</div>
+          <button class="btn bp" onclick="startDraw()">✦ Disegna Poligono</button>
+          <button class="btn bn" id="bfin" onclick="finishDraw()" disabled>✓ Chiudi Poligono</button>
+          <button class="btn bd" onclick="clearAll()">✕ Cancella tutto</button>
+        </div>
+        <div id="linear-draw">
+          <div class="slbl">Asse del rilievo</div>
+          <div id="dstat-lin" class="ib" style="margin-bottom:8px;font-size:12px;display:none">✏ Tocca la mappa per i punti dell'asse · Doppio tap = fine</div>
+          <button class="btn bp" onclick="startLinearDraw()">〰 Traccia asse</button>
+          <button class="btn bn" id="bfin-lin" onclick="finishLinearDraw()" disabled>✓ Termina tracciato</button>
+          <button class="btn bd" onclick="clearAll()">✕ Cancella tutto</button>
+        </div>
+        <div class="slbl">Vertici / punti asse</div>
+        <div id="wplist"><div style="padding:10px;text-align:center;color:var(--dim)">Nessun vertice</div></div>
+        <div class="slbl">Cerca posizione</div>
+        <div class="f"><label>Indirizzo / luogo</label><input type="text" id="srch" placeholder="Es: Noventa di Piave" onkeydown="if(event.key==='Enter')doSearch()"></div>
+        <button class="btn bn" onclick="doSearch()">🔍 Cerca</button>
+        <div class="slbl">Posizione GPS</div>
+        <div class="ib" id="gps-info">Premi 📍 sulla mappa per attivare il GPS.</div>
+      </div>
+
+      <!-- TAB PARAMETRI -->
+      <div id="t-params" class="tc">
+        <div class="slbl">Fotocamera</div>
+        <div class="ib"><strong>DJI Mini 2 — 4:3 · 12 MP</strong><br>Sensore 1/2.3" · 4000×3000 px · Sw = 6.17 mm<br>Focale reale: 4.49 mm (eq. 24.4 mm) · px: 0.001543 mm/px</div>
+        <div class="slbl">Quota e GSD</div>
+        <div class="f">
+          <div class="rv-row"><label>GSD richiesto</label><span class="rv" id="gsd-req-v">3 cm/px</span></div>
+          <input type="range" id="gsd-req" min="1" max="8" value="3" step="0.5" oninput="onGsdChange()">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Quota di volo AGL</label><span class="rv" id="alt-v">80 m</span></div>
+          <input type="range" id="alt" min="20" max="120" value="80" step="5" oninput="onAltChange()">
+        </div>
+        <div class="ib" id="alt-info"></div>
+        <div class="slbl">Overlap</div>
+        <div class="f">
+          <div class="rv-row"><label>Overlap frontale / longitudinale</label><span class="rv" id="ovl-v">80%</span></div>
+          <input type="range" id="ovl" min="50" max="90" value="80" step="5" oninput="onRng('ovl','ovl-v','%');updateSpeedInfo()">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Overlap laterale / trasversale</label><span class="rv" id="ovt-v">70%</span></div>
+          <input type="range" id="ovt" min="40" max="85" value="70" step="5" oninput="onRng('ovt','ovt-v','%')">
+        </div>
+        <div class="slbl">Velocità e scatti</div>
+        <div class="f">
+          <div class="rv-row"><label>Intervallo scatti Litchi</label><span class="rv" id="tint-v">4 s</span></div>
+          <input type="range" id="tint" min="1" max="10" value="4" step="1" oninput="onRng('tint','tint-v',' s');updateSpeedInfo()">
+        </div>
+        <div class="ib" id="speed-info"></div>
+        <div class="slbl">Direzione strisciate</div>
+        <div class="f">
+          <div class="rv-row"><label>Angolo strisciate (° da Nord)</label><span class="rv" id="angle-v">0°</span></div>
+          <input type="range" id="angle" min="0" max="179" value="0" step="1" oninput="onRng('angle','angle-v','°')">
+        </div>
+        <button class="btn bn" style="margin-top:6px" onclick="autoAngle()">⟳ Angolo automatico (asse lungo)</button>
+
+        <div id="linear-params">
+          <div class="slbl">Strisciate lineari</div>
+          <div class="f">
+            <div class="rv-row"><label>Strisciate per lato</label><span class="rv" id="lstrips-v">2</span></div>
+            <input type="range" id="lstrips" min="0" max="8" value="2" step="1" oninput="onRng('lstrips','lstrips-v','')">
+          </div>
+          <div class="f">
+            <div class="rv-row"><label>Distanza tra strisciate [m]</label><span class="rv" id="lstep-v">50 m</span></div>
+            <input type="range" id="lstep" min="10" max="300" value="50" step="5" oninput="onRng('lstep','lstep-v',' m')">
+          </div>
+          <div class="f">
+            <div class="rv-row"><label>Estensione oltre gli estremi [m]</label><span class="rv" id="lext-v">30 m</span></div>
+            <input type="range" id="lext" min="0" max="200" value="30" step="10" oninput="onRng('lext','lext-v',' m')">
+          </div>
+          <div class="ib" style="font-size:11px">💡 Totale = 1 centrale + 2 × strisciate per lato.</div>
+          <div class="slbl">Quote differenziate (opzionale)</div>
+          <div class="f" style="display:flex;align-items:center;gap:10px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+              <input type="checkbox" id="lalt-custom" onchange="onLaltCustomChange()" style="width:18px;height:18px;accent-color:var(--acc)">
+              <span style="font-size:13px;font-weight:600;color:var(--txt)">Quote diverse per strisciata</span>
+            </label>
+          </div>
+          <div id="lalt-strip-rows" style="display:none"></div>
+        </div>
+
+        <div class="slbl" style="margin-top:16px">Crosshatch</div>
+        <div class="ib" style="font-size:12px">Aggiunge un secondo passaggio ortogonale (+90°). Raddoppia foto e batterie, produce modelli 3D di qualità superiore.</div>
+        <div class="f" style="display:flex;align-items:center;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+            <input type="checkbox" id="crosshatch" onchange="onCrosshatchChange()" style="width:18px;height:18px;accent-color:var(--acc)">
+            <span style="font-size:13px;font-weight:600;color:var(--txt)">Abilita crosshatch</span>
+          </label>
+        </div>
+        <div id="crosshatch-opts" style="display:none">
+          <div class="f">
+            <div class="rv-row"><label>Quota 2° passaggio AGL</label><span class="rv" id="alt2-v">80 m</span></div>
+            <input type="range" id="alt2" min="20" max="120" value="80" step="5" oninput="onRng('alt2','alt2-v',' m')">
+          </div>
+        </div>
+
+        <div class="slbl">Opzioni Litchi</div>
+        <div class="f">
+          <div class="rv-row"><label>Gimbal pitch — 1° passaggio</label><span class="rv" id="gpitch-v">-90°</span></div>
+          <input type="range" id="gpitch" min="-90" max="0" value="-90" step="5" oninput="onRng('gpitch','gpitch-v','°')">
+        </div>
+        <div class="f" id="gpitch2-row" style="display:none">
+          <div class="rv-row"><label>Gimbal pitch — 2° passaggio</label><span class="rv" id="gpitch2-v">-90°</span></div>
+          <input type="range" id="gpitch2" min="-90" max="0" value="-90" step="5" oninput="onRng('gpitch2','gpitch2-v','°')">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Curvesize — raccordo virate</label><span class="rv" id="csize-v">0.2 m</span></div>
+          <input type="range" id="csize" min="0" max="5" value="0.2" step="0.1" oninput="onRng('csize','csize-v',' m')">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Ritardo svolta stimato</label><span class="rv" id="tdel-v">10 s</span></div>
+          <input type="range" id="tdel" min="0" max="20" value="10" step="1" oninput="onRng('tdel','tdel-v',' s')">
+        </div>
+
+        <div class="slbl">Giro perimetrale (obliquo)</div>
+        <div class="ib" style="font-size:12px">Passaggio lungo il perimetro con camera inclinata verso il <strong>centroide dell'area a quota terreno</strong>. Heading calcolato verso il centro ad ogni WP, POI impostato sul centroide a 0 m.</div>
+        <div class="f" style="display:flex;align-items:center;gap:10px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0">
+            <input type="checkbox" id="perimeter" onchange="onPerimeterChange()" style="width:18px;height:18px;accent-color:var(--acc)">
+            <span style="font-size:13px;font-weight:600;color:var(--txt)">Abilita giro perimetrale</span>
+          </label>
+        </div>
+        <div id="perimeter-opts" style="display:none">
+          <div class="f">
+            <div class="rv-row"><label>Quota perimetrale AGL</label><span class="rv" id="palt-v">60 m</span></div>
+            <input type="range" id="palt" min="20" max="120" value="60" step="5" oninput="onRng('palt','palt-v',' m')">
+          </div>
+          <div class="f">
+            <div class="rv-row"><label>Gimbal pitch perimetrale</label><span class="rv" id="ppitch-v">-45°</span></div>
+            <input type="range" id="ppitch" min="-90" max="-10" value="-45" step="5" oninput="onRng('ppitch','ppitch-v','°')">
+          </div>
+          <div class="f">
+            <div class="rv-row"><label>Offset dal bordo [m]</label><span class="rv" id="poffset-v">15 m</span></div>
+            <input type="range" id="poffset" min="5" max="50" value="15" step="5" oninput="onRng('poffset','poffset-v',' m')">
+          </div>
+          <div class="ib" style="font-size:11px">🎯 Il drone punta verso il centroide dell'area a 0 m (terreno). Il pitch viene interpolato da Litchi in base al parametro impostato.</div>
+        </div>
+
+        <button class="btn bp" style="margin-top:10px" onclick="surveyMode==='linear'?computeLinear():compute()">⚡ Calcola Missione</button>
+      </div>
+
+      <!-- TAB RISULTATI -->
+      <div id="t-results" class="tc">
+        <div id="res-empty" class="ib" style="text-align:center;padding:24px">Imposta l'area e i parametri,<br>poi premi <strong>Calcola Missione</strong></div>
+        <div id="res-content" style="display:none">
+          <div class="slbl">Riepilogo missione</div>
+          <div class="sg">
+            <div class="sc"><div class="v" id="r-gsd">—</div><div class="u">cm/px</div><div class="l">GSD reale</div></div>
+            <div class="sc"><div class="v" id="r-alt">—</div><div class="u">m AGL</div><div class="l">Quota</div></div>
+            <div class="sc"><div class="v" id="r-str">—</div><div class="u">n°</div><div class="l">Strisciate</div></div>
+            <div class="sc"><div class="v" id="r-wp">—</div><div class="u">n°</div><div class="l">Waypoints</div></div>
+            <div class="sc"><div class="v" id="r-ph">—</div><div class="u">foto est.</div><div class="l">Scatti</div></div>
+            <div class="sc"><div class="v" id="r-area">—</div><div class="u"></div><div class="l">Area</div></div>
+            <div class="sc"><div class="v" id="r-dist">—</div><div class="u">m</div><div class="l">Rotta totale</div></div>
+            <div class="sc"><div class="v" id="r-time">—</div><div class="u">min</div><div class="l">Tempo stim.</div></div>
+            <div class="sc"><div class="v" id="r-spd">—</div><div class="u">km/h</div><div class="l">Velocità</div></div>
+            <div class="sc"><div class="v" id="r-ds">—</div><div class="u">m</div><div class="l">Dist. scatti</div></div>
+          </div>
+          <div id="r-warn" class="wb" style="display:none"></div>
+          <div id="r-ok" class="ob" style="display:none"></div>
+          <div class="slbl">Piano batterie</div>
+          <div id="fuel-plan"></div>
+          <div class="slbl">Esporta</div>
+          <div id="export-btns"></div>
+          <button class="btn bk" onclick="exportKML()">⬇ Esporta KML Google Earth</button>
+          <div id="export-gcp-row" style="display:none;margin-top:6px">
+            <button class="btn" onclick="exportCSVwithGCP()" style="background:#d94000;color:#fff;border:none">📍 Esporta CSV con GCP di campo (<span id="export-gcp-count">0</span> punti)</button>
+          </div>
+          <!-- Cartella salvataggio + Mission Hub -->
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn bn" id="btn-folder" onclick="pickSaveFolder()" style="flex:1;min-width:140px">
+              📁 <span id="folder-label">Scegli cartella salvataggio</span>
+            </button>
+            <button class="btn bp" onclick="openMissionHub()" style="flex:1;min-width:140px;background:#e07000;border-color:#e07000">
+              📡 Importa in Mission Hub
+            </button>
+          </div>
+          <div id="folder-info" class="ib" style="font-size:11px;display:none;margin-top:6px"></div>
+          <div class="slbl">GCP — Punti di Controllo a Terra</div>
+          <div id="gcp-section"></div>
+          <div class="slbl">Note</div>
+          <div class="ib" id="r-notes"></div>
+        </div>
+      </div>
+
+      <!-- TAB GCP -->
+      <div id="t-gcp" class="tc">
+        <div class="ib" style="font-size:12px">Posizionati sopra ogni target GCP e premi il pulsante. Il drone si abbasserà su quei punti durante la missione per scattare foto ravvicinate.<br><strong>Precisione GPS telefono: ±3–8 m</strong> — solo posizionamento approssimativo.</div>
+
+        <div class="slbl">Parametri volo GCP</div>
+        <div class="f">
+          <div class="rv-row"><label>Quota volo sui GCP (AGL)</label><span class="rv" id="gcp-alt-v">20 m</span></div>
+          <input type="range" id="gcp-alt" min="10" max="60" value="20" step="5" oninput="onRng('gcp-alt','gcp-alt-v',' m')">
+        </div>
+        <div class="f">
+          <div class="rv-row"><label>Sosta sul GCP</label><span class="rv" id="gcp-stay-v">8 s</span></div>
+          <input type="range" id="gcp-stay" min="3" max="20" value="8" step="1" oninput="onRng('gcp-stay','gcp-stay-v',' s')">
+        </div>
+        <div class="ib" style="font-size:11px">💡 Il drone: scende alla quota GCP → sosta → risale alla quota missione e continua. La sosta accumula scatti ravvicinati.</div>
+
+        <div class="slbl">Acquisizione GCP</div>
+        <button class="btn bp" id="btn-acq-gcp" onclick="acquireGCP()" style="background:#d94000;border-color:#d94000;font-size:14px">📍 Acquisisci GCP — usa posizione attuale</button>
+        <div id="gcp-gps-status" class="ib" style="font-size:11px;display:none"></div>
+
+        <!-- Pannello foto immediata — appare dopo acquisizione -->
+        <div id="gcp-photo-prompt" style="display:none;background:#fff8f0;border:2px solid #e07000;border-radius:var(--r);padding:10px;margin-top:8px">
+          <div style="font-size:12px;font-weight:700;color:#a04000;margin-bottom:8px">📷 GCP <span id="gcp-photo-prompt-idx"></span> — allega foto adesso?</div>
+          <div style="display:flex;gap:8px">
+            <button onclick="triggerPhotoForLast()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📷 Sì — scatta / scegli ora</button>
+            <button onclick="dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:2px solid var(--border);background:var(--surf);color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer">Dopo</button>
+          </div>
+        </div>
+
+        <!-- Input file nascosto — riutilizzabile per qualsiasi GCP -->
+        <input type="file" id="gcp-photo-input" accept="image/*" style="display:none" onchange="onGCPPhotoSelected(this)">
+
+        <div class="slbl">GCP acquisiti — <span id="gcp-count">0</span></div>
+        <div id="gcp-list" style="border:2px solid var(--border);border-radius:var(--r);background:var(--surf);max-height:260px;overflow-y:auto;margin-bottom:8px">
+          <div id="gcp-empty" style="padding:12px;text-align:center;color:var(--dim);font-size:12px">Nessun GCP acquisito</div>
+        </div>
+        <button class="btn bn" onclick="clearGCPField()">🗑 Cancella tutti i GCP</button>
+        <div class="ib" style="font-size:11px;margin-top:8px">⚠ I GCP di campo vengono aggiunti ai waypoint Litchi <strong>dopo</strong> il calcolo missione, in fase di export CSV.</div>
+      </div>
+
+      <!-- TAB LUCE -->
+      <div id="t-luce" class="tc">
+        <div class="slbl">Impostazioni camera Mini 2</div>
+        <div class="ib" style="font-size:12px">Genera un prompt con i parametri del tuo volo, aprilo su Claude.ai con le foto della scena.</div>
+        <div class="slbl">1 · Contesto volo</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px" id="luce-surface-btns">
+          <button class="luce-surf-btn active" data-v="acqua_fiume" onclick="selSurf(this)">🌊 Fiume/acqua</button>
+          <button class="luce-surf-btn" data-v="vegetazione" onclick="selSurf(this)">🌿 Vegetazione</button>
+          <button class="luce-surf-btn" data-v="terreno_nudo" onclick="selSurf(this)">🟤 Terreno nudo</button>
+          <button class="luce-surf-btn" data-v="asfalto_strade" onclick="selSurf(this)">🛣 Asfalto</button>
+          <button class="luce-surf-btn" data-v="misto" onclick="selSurf(this)">🔀 Misto</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="luce-time-btns">
+          <button class="luce-surf-btn active" data-v="mattino" onclick="selTime(this)">🌅 Mattino (7–10)</button>
+          <button class="luce-surf-btn" data-v="mezzogiorno" onclick="selTime(this)">☀ Mezzogiorno (10–14)</button>
+          <button class="luce-surf-btn" data-v="pomeriggio" onclick="selTime(this)">🌤 Pomeriggio (14–17)</button>
+          <button class="luce-surf-btn" data-v="cielo_coperto" onclick="selTime(this)">☁ Cielo coperto</button>
+        </div>
+        <div class="slbl">2 · Genera prompt</div>
+        <button class="btn bp" onclick="generaPromptLuce()">📋 Genera prompt da copiare</button>
+        <div id="luce-prompt-box" style="display:none;margin-top:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:11px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.06em">Prompt generato</span>
+            <button onclick="copiaPrompt()" style="padding:5px 12px;border-radius:20px;border:2px solid var(--acc);background:var(--surf);color:var(--acc);font-size:11px;font-weight:700;cursor:pointer">📋 Copia</button>
+          </div>
+          <div id="luce-prompt-text" style="background:var(--surf2);border:2px solid var(--border);border-radius:var(--r);padding:10px;font-size:11px;font-family:var(--mono);color:var(--txt);line-height:1.6;white-space:pre-wrap;word-break:break-word;max-height:180px;overflow-y:auto"></div>
+          <a href="https://claude.ai" target="_blank" rel="noopener" style="display:block;margin-top:8px;text-align:center;padding:11px;border-radius:var(--r);background:var(--acc);color:#fff;font-size:13px;font-weight:700;text-decoration:none">🤖 Apri Claude.ai</a>
+        </div>
+        <div class="slbl" style="margin-top:16px">3 · Incolla i risultati</div>
+        <div id="luce-table-wrap">
+          <table style="width:100%;border-collapse:collapse;font-size:12px">
+            <thead><tr style="background:var(--acc);color:#fff">
+              <th style="padding:7px 8px;text-align:left;font-size:11px">Parametro</th>
+              <th style="padding:7px 8px;text-align:left;font-size:11px">Valore</th>
+              <th style="padding:7px 8px;text-align:left;font-size:11px;width:40%">Note</th>
+            </tr></thead>
+            <tbody id="luce-tbody"></tbody>
+          </table>
+          <button class="btn bn" style="margin-top:8px;font-size:11px" onclick="resetTabella()">↩ Azzera tabella</button>
+          <button class="btn bn" style="margin-top:4px;font-size:11px" onclick="copiaTabella()">📋 Copia tabella</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// ── VIEWPORT FIX ──────────────────────────────────────────────────────────────
+function setVH(){document.documentElement.style.setProperty('--vh',(window.innerHeight*0.01)+'px');}
+setVH();window.addEventListener('resize',setVH);window.addEventListener('orientationchange',()=>setTimeout(setVH,300));
+
+// ── CAMERA DJI Mini 2 ─────────────────────────────────────────────────────────
+const CAM={
+  Sw:6.17,Sh:4.551,FR:4.49,pw:0.001543,
+  FR_calc:4.323347,pw_h:0.0015425,t_sc:0.003125,
+  fp_w(H){return this.Sw/this.FR*H;},
+  fp_h(H){return this.Sh/this.FR*H;},
+  gsd_cm(H){return this.pw*H*100/this.FR;},
+  H_from_gsd(g){return g*this.FR/(this.pw*100);}
+};
+
+// ── MAPPA ─────────────────────────────────────────────────────────────────────
+const map=L.map('map',{zoomControl:true,attributionControl:false}).setView([45.65,12.56],13);
+map.zoomControl.setPosition('bottomleft');
+const osmL=L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:20});
+const satL=L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3']});
+// CTR — OpenTopoMap
+const ctrL=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{
+  maxZoom:17,subdomains:['a','b','c'],
+  attribution:'© OpenTopoMap (CC-BY-SA)'
+});
+
+// Bing Maps Aerial — quadkey custom
+const BingLayer = L.TileLayer.extend({
+  getTileUrl: function(coords) {
+    const z=coords.z, x=coords.x, y=coords.y;
+    let q='';
+    for(let i=z;i>0;i--){
+      let d=0;
+      const mask=1<<(i-1);
+      if((x&mask)!==0)d+=1;
+      if((y&mask)!==0)d+=2;
+      q+=d;
+    }
+    const s=Math.floor(Math.random()*4);
+    return `https://ecn.t${s}.tiles.virtualearth.net/tiles/a${q}.jpeg?g=1&n=z`;
+  }
+});
+const bingAerialL = new BingLayer('', {
+  maxZoom:20,
+  attribution:'© <a href="https://www.microsoft.com/maps">Microsoft Bing Maps</a>'
+});
+
+const BASEMAPS=[
+  {layer:osmL,        label:'Mappa',     icon:'🗺', title:'Mappa (CartoDB)'},
+  {layer:satL,        label:'Satellite', icon:'🛰', title:'Satellite (Google)'},
+  {layer:bingAerialL, label:'Bing',      icon:'🅱', title:'Bing Maps Aerial (Microsoft)'},
+  {layer:ctrL,        label:'Topo',      icon:'📐', title:'Carta Topografica (OpenTopoMap)'},
+];
+let basemapIdx=0;
+osmL.addTo(map);
+document.getElementById('basemap-label').textContent=BASEMAPS[0].label;
+
+function cycleBasemap(){
+  const prev=BASEMAPS[basemapIdx];
+  if(prev.layer.removeFrom) prev.layer.removeFrom(map); else map.removeLayer(prev.layer);
+  basemapIdx=(basemapIdx+1)%BASEMAPS.length;
+  const bm=BASEMAPS[basemapIdx];
+  bm.layer.addTo(map);
+  const btn=document.getElementById('btn-basemap');
+  btn.textContent=bm.icon;
+  btn.classList.toggle('active',basemapIdx!==0);
+  const lbl=document.getElementById('basemap-label');
+  lbl.textContent=bm.label;
+  lbl.style.opacity='1';
+  clearTimeout(lbl._t);lbl._t=setTimeout(()=>lbl.style.opacity='0',2200);
+  toast(bm.title);
+}
+function toggleSat(){
+  if(basemapIdx===1){cycleBasemap();}else{while(basemapIdx!==1)cycleBasemap();}
+}
+
+// ── IMPRONTE FOTOGRAFICHE ─────────────────────────────────────────────────────
+let footprintOn=false,footprintLayer=null;
+
+function toggleFootprint(){
+  footprintOn=!footprintOn;
+  const btn=document.getElementById('btn-footprint');
+  btn.classList.toggle('active',footprintOn);
+  if(footprintOn){
+    if(!result){toast('⚠ Genera prima un piano di volo');footprintOn=false;btn.classList.remove('active');return;}
+    drawFootprints();
+    toast('📷 Impronte fotografiche attive');
+  } else {
+    if(footprintLayer){map.removeLayer(footprintLayer);footprintLayer=null;}
+  }
+}
+
+function drawFootprints(){
+  if(footprintLayer){map.removeLayer(footprintLayer);footprintLayer=null;}
+  if(!result)return;
+
+  const H=result.H;
+  // dimensioni footprint in metri
+  const fw=CAM.fp_w(H);  // larghezza (direzione volo = asse lungo)
+  const fh=CAM.fp_h(H);  // altezza (direzione trasversale)
+  const angle=result.angle||0; // angolo strisciate in radianti
+
+  // converte metri in gradi (approssimazione locale)
+  const lat0=vertices.reduce((s,v)=>s+v.lat,0)/vertices.length;
+  const mPerDegLat=111320;
+  const mPerDegLng=111320*Math.cos(lat0*Math.PI/180);
+
+  const g=L.layerGroup();
+
+  // raccoglie tutti i WP da tutte le batterie (missione principale)
+  const allWPs=result.fuels.flatMap(f=>f.wps);
+
+  // per ogni WP disegna il footprint ruotato
+  allWPs.forEach((wp,i)=>{
+    // angolo di volo: usa l'angolo delle strisciate
+    // alterna tra strisciate pari e dispari per capire la direzione
+    const a=angle; // angolo strisciate rispetto al Nord in radianti
+
+    // semiasse lungo il volo (fw/2) e trasversale (fh/2)
+    const hw=fw/2, hh=fh/2;
+
+    // calcola i 4 angoli del rettangolo ruotato
+    const cos=Math.cos(a), sin=Math.sin(a);
+    const corners=[
+      {dx:-hw*cos - hh*sin, dy:-hw*sin + hh*cos},
+      {dx: hw*cos - hh*sin, dy: hw*sin + hh*cos},
+      {dx: hw*cos + hh*sin, dy: hw*sin - hh*cos},
+      {dx:-hw*cos + hh*sin, dy:-hw*sin - hh*cos}
+    ];
+
+    const latLngs=corners.map(c=>([
+      wp.lat + c.dy/mPerDegLat,
+      wp.lng + c.dx/mPerDegLng
+    ]));
+
+    // colore per batteria
+    const batIdx=result.fuels.findIndex(f=>f.wps.includes(wp));
+    const batColors=['rgba(0,102,204,0.13)','rgba(180,60,0,0.13)','rgba(0,140,60,0.13)','rgba(140,0,180,0.13)'];
+    const strokeColors=['#0066cc','#b43c00','#008c3c','#8c00b4'];
+    const ci=Math.max(0,batIdx)%batColors.length;
+
+    L.polygon(latLngs,{
+      color:strokeColors[ci],
+      weight:0.5,
+      fillColor:batColors[ci],
+      fillOpacity:1,
+      interactive:false
+    }).addTo(g);
+  });
+
+  footprintLayer=g.addTo(map);
+  // porta le strisciate sopra le impronte
+  if(stripesL)stripesL.bringToFront();
+}
+
+// rigenera impronte se già attive dopo un nuovo calcolo
+function refreshFootprintIfOn(){
+  if(footprintOn&&result)drawFootprints();
+}
+
+// ── MISURA DISTANZE / AREE ────────────────────────────────────────────────────
+let measureOn=false,measurePts=[],measureLayers=[];
+
+function toggleMeasure(){
+  measureOn=!measureOn;
+  document.getElementById('btn-measure').classList.toggle('active',measureOn);
+  document.getElementById('measure-panel').classList.toggle('on',measureOn);
+  if(!measureOn)clearMeasure();
+  else toast('📏 Tocca la mappa per misurare · doppio tap = chiudi area');
+}
+
+function clearMeasure(){
+  measurePts=[];
+  measureLayers.forEach(l=>map.removeLayer(l));
+  measureLayers=[];
+  document.getElementById('measure-result').textContent='Tocca la mappa per aggiungere punti · doppio tap per chiudere l\'area';
+}
+
+function addMeasurePoint(lat,lng){
+  measurePts.push([lat,lng]);
+  const mk=L.circleMarker([lat,lng],{radius:5,color:'#0066cc',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
+  measureLayers.push(mk);
+  if(measurePts.length>1){
+    const pl=L.polyline(measurePts,{color:'#0066cc',weight:2,dashArray:'6 4'}).addTo(map);
+    measureLayers.push(pl);
+  }
+  updateMeasureResult();
+}
+
+function closeMeasureArea(){
+  if(measurePts.length<3)return;
+  // rimuovi la polyline aperta e sostituisci con poligono
+  measureLayers.forEach(l=>map.removeLayer(l));
+  measureLayers=[];
+  measurePts.forEach(p=>{
+    const mk=L.circleMarker(p,{radius:5,color:'#0066cc',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
+    measureLayers.push(mk);
+  });
+  const poly=L.polygon(measurePts,{color:'#0066cc',weight:2,fillColor:'#0066cc',fillOpacity:0.12,dashArray:'6 4'}).addTo(map);
+  measureLayers.push(poly);
+  updateMeasureResult(true);
+}
+
+function updateMeasureResult(closed=false){
+  const n=measurePts.length;
+  if(n<2){document.getElementById('measure-result').textContent='1 punto — tocca per continuare';return;}
+  let dist=0;
+  for(let i=1;i<n;i++)dist+=map.distance(measurePts[i-1],measurePts[i]);
+  const distStr=dist>=1000?`${(dist/1000).toFixed(3)} km`:`${dist.toFixed(1)} m`;
+  let html=`Distanza: <strong>${distStr}</strong> · ${n} punti`;
+  if(closed&&n>=3){
+    const R=6371000,pts=measurePts.map(p=>({
+      x:p[1]*Math.PI/180*R*Math.cos(p[0]*Math.PI/180),
+      y:p[0]*Math.PI/180*R
+    }));
+    let area=0;
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++)area+=pts[j].x*pts[i].y-pts[i].x*pts[j].y;
+    area=Math.abs(area/2);
+    const areaStr=area>=10000?`${(area/10000).toFixed(4)} ha`:`${area.toFixed(1)} m²`;
+    html+=`<br>Area: <strong>${areaStr}</strong>`;
+  } else if(n>=3){
+    html+=` · <span style="color:var(--dim);font-size:11px">doppio tap per chiudere e calcolare area</span>`;
+  }
+  document.getElementById('measure-result').innerHTML=html;
+}
+
+// ── GCP DI CAMPO (acquisizione GPS telefono) ──────────────────────────────────
+let gcpFieldPoints = []; // {lat, lng, acc, idx}
+let gcpFieldLayer = null;
+
+// ── PREFISSO FILE (da geocodifica inversa del 1° GCP) ─────────────────────────
+let _missionPrefix = null;
+
+function missionPrefix() {
+  if (_missionPrefix) return _missionPrefix;
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2,'0');
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  return 'missione_' + dd + '-' + mm + '-' + d.getFullYear();
+}
+
+async function fetchMissionPrefix(lat, lng) {
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng + '&format=json&accept-language=it', {
+      headers: { 'User-Agent': 'DroneSurveyPlanner/1.0' }
+    });
+    const d = await r.json();
+    const addr = d.address || {};
+    const comune = addr.city || addr.town || addr.village || addr.municipality || addr.hamlet || 'loc';
+    const sigle = {'venezia':'VE','treviso':'TV','padova':'PD','vicenza':'VI','verona':'VR','rovigo':'RO','belluno':'BL',
+      'udine':'UD','pordenone':'PN','gorizia':'GO','trieste':'TS','milano':'MI','roma':'RM','torino':'TO',
+      'bologna':'BO','firenze':'FI','napoli':'NA','palermo':'PA','genova':'GE','bari':'BA','cuneo':'CN',
+      'novara':'NO','varese':'VA','como':'CO','bergamo':'BG','brescia':'BS','mantova':'MN','cremona':'CR',
+      'pavia':'PV','lodi':'LO','lecco':'LC','sondrio':'SO','monza':'MB','alessandria':'AL','asti':'AT',
+      'biella':'BI','vercelli':'VC','verbano':'VB','aosta':'AO','imperia':'IM','savona':'SV','genova':'GE',
+      'la spezia':'SP','massa':'MS','lucca':'LU','pistoia':'PT','prato':'PO','livorno':'LI','pisa':'PI',
+      'arezzo':'AR','siena':'SI','grosseto':'GR','perugia':'PG','terni':'TR','ancona':'AN','pesaro':'PU',
+      'macerata':'MC','ascoli':'AP','fermo':'FM','viterbo':'VT','rieti':'RI','frosinone':'FR','latina':'LT',
+      'caserta':'CE','benevento':'BN','avellino':'AV','salerno':'SA','foggia':'FG','bat':'BT','taranto':'TA',
+      'brindisi':'BR','lecce':'LE','potenza':'PZ','matera':'MT','cosenza':'CS','catanzaro':'CZ','vibo':'VV',
+      'reggio calabria':'RC','messina':'ME','catania':'CT','siracusa':'SR','ragusa':'RG','agrigento':'AG',
+      'caltanissetta':'CL','enna':'EN','trapani':'TP','sassari':'SS','nuoro':'NU','cagliari':'CA','oristano':'OR'};
+    let sigla = '';
+    const prov = (addr.county || addr.state || '').toLowerCase();
+    for (const [k,v] of Object.entries(sigle)) { if (prov.includes(k)) { sigla = v; break; } }
+    if (!sigla && addr['ISO3166-2-lvl6']) sigla = addr['ISO3166-2-lvl6'].replace('IT-','');
+    if (!sigla) sigla = prov.replace(/[^a-z]/gi,'').substring(0,2).toUpperCase() || 'IT';
+    const d2 = new Date();
+    const dd = String(d2.getDate()).padStart(2,'0');
+    const mm2 = String(d2.getMonth()+1).padStart(2,'0');
+    const comunePulito = comune.replace(/[^a-zA-Z0-9À-ÿ]/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');
+    _missionPrefix = comunePulito + '_' + sigla + '_' + dd + '-' + mm2 + '-' + d2.getFullYear();
+    toast('\u2713 Missione: ' + _missionPrefix.replace(/_/g,' '));
+  } catch(e) {
+    const d2 = new Date();
+    _missionPrefix = 'missione_' + String(d2.getDate()).padStart(2,'0') + '-' + String(d2.getMonth()+1).padStart(2,'0') + '-' + d2.getFullYear();
+  }
+}
+
+function acquireGCP() {
+  const btn = document.getElementById('btn-acq-gcp');
+  const status = document.getElementById('gcp-gps-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Acquisizione GPS…';
+  status.style.display = 'block';
+  status.textContent = 'In attesa del segnale GPS…';
+  dismissPhotoPrompt();
+
+  if (!navigator.geolocation) {
+    toast('⚠ GPS non disponibile su questo dispositivo');
+    btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude, acc = Math.round(pos.coords.accuracy);
+      const idx = gcpFieldPoints.length + 1;
+      gcpFieldPoints.push({ lat, lng, acc, idx, photo: null });
+      if (idx === 1) fetchMissionPrefix(lat, lng); // geocodifica inversa solo al 1° GCP
+      renderGCPFieldList();
+      renderGCPFieldMap();
+      updateGCPExportBtn();
+      status.textContent = `✓ GCP ${idx} acquisito — precisione ±${acc} m`;
+      status.style.background = '#f0fff4'; status.style.borderColor = '#1a7a00'; status.style.color = '#1a5c00';
+      btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+      toast(`✓ GCP ${idx} acquisito (±${acc} m)`);
+      // Mostra pannello foto immediata
+      showPhotoPrompt(idx);
+    },
+    err => {
+      const msgs = { 1: 'GPS negato — consenti la posizione al browser', 2: 'Posizione non disponibile', 3: 'GPS timeout — riprova' };
+      status.textContent = '⚠ ' + (msgs[err.code] || 'Errore GPS');
+      status.style.background = '#fff5f0'; status.style.borderColor = '#d94000'; status.style.color = '#a03000';
+      btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
+      toast('⚠ ' + (msgs[err.code] || 'Errore GPS'));
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+  );
+}
+
+function renderGCPFieldList() {
+  const list = document.getElementById('gcp-list');
+  const empty = document.getElementById('gcp-empty');
+  document.getElementById('gcp-count').textContent = gcpFieldPoints.length;
+  if (!gcpFieldPoints.length) {
+    list.innerHTML = '';
+    empty.style.display = 'block';
+    list.appendChild(empty);
+    return;
+  }
+  empty.style.display = 'none';
+  list.innerHTML = gcpFieldPoints.map((p, i) => `
+    <div style="padding:8px 9px;border-bottom:1px solid var(--surf2)">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+        <span style="background:#d94000;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">${p.idx}</span>
+        <span style="flex:1;font-family:var(--mono);font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}<br><span style="color:var(--dim)">±${p.acc} m</span></span>
+        <button onclick="triggerPhotoFor(${i})" title="Allega foto" style="padding:4px 8px;border-radius:6px;border:1.5px solid #e07000;background:${p.photo?'#e07000':'#fff8f0'};color:${p.photo?'#fff':'#a04000'};font-size:13px;cursor:pointer;flex-shrink:0">${p.photo?'📷✓':'📷'}</button>
+        <button onclick="removeGCPField(${i})" style="padding:3px 8px;border-radius:6px;border:1.5px solid #d94000;background:#fff5f0;color:#d94000;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
+      </div>
+      ${p.photo ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:120px;display:flex;align-items:center;justify-content:center;background:#000">
+        <img src="${p.photo}" style="max-width:100%;max-height:120px;object-fit:contain;display:block" onclick="viewGCPPhoto(${i})">
+      </div>` : ''}
+    </div>`).join('');
+}
+
+function removeGCPField(i) {
+  gcpFieldPoints.splice(i, 1);
+  gcpFieldPoints.forEach((p, j) => p.idx = j + 1);
+  renderGCPFieldList();
+  renderGCPFieldMap();
+  updateGCPExportBtn();
+  toast('GCP rimosso');
+}
+
+// ── FOTO GCP ──────────────────────────────────────────────────────────────────
+let _gcpPhotoTargetIdx = null; // indice in gcpFieldPoints del GCP a cui allegare la foto
+
+function showPhotoPrompt(displayIdx) {
+  const panel = document.getElementById('gcp-photo-prompt');
+  document.getElementById('gcp-photo-prompt-idx').textContent = displayIdx;
+  _gcpPhotoTargetIdx = gcpFieldPoints.length - 1; // ultimo acquisito
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function dismissPhotoPrompt() {
+  const panel = document.getElementById('gcp-photo-prompt');
+  if (panel) panel.style.display = 'none';
+  _gcpPhotoTargetIdx = null;
+}
+
+function triggerPhotoForLast() {
+  // Photo per il GCP appena acquisito (pannello immediato)
+  _gcpPhotoTargetIdx = gcpFieldPoints.length - 1;
+  dismissPhotoPrompt();
+  document.getElementById('gcp-photo-input').click();
+}
+
+function triggerPhotoFor(listIdx) {
+  // Photo per un GCP specifico dalla lista
+  _gcpPhotoTargetIdx = listIdx;
+  document.getElementById('gcp-photo-input').click();
+}
+
+function onGCPPhotoSelected(input) {
+  if (!input.files || !input.files[0]) return;
+  if (_gcpPhotoTargetIdx === null || _gcpPhotoTargetIdx >= gcpFieldPoints.length) return;
+  const file = input.files[0];
+  const targetIdx = _gcpPhotoTargetIdx;
+  _gcpPhotoTargetIdx = null;
+  input.value = '';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 900;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.82);
+      gcpFieldPoints[targetIdx].photo = compressed;
+      gcpFieldPoints[targetIdx].photoName = file.name;
+      const kb = Math.round(compressed.length * 0.75 / 1024);
+      renderGCPFieldList();
+      toast('✓ Foto allegata a GCP ' + gcpFieldPoints[targetIdx].idx + ' (' + kb + ' KB)');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function viewGCPPhoto(i) {
+  const p = gcpFieldPoints[i];
+  if (!p || !p.photo) return;
+  // Apre la foto a schermo intero in un overlay temporaneo
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px';
+  ov.innerHTML = `
+    <div style="color:#fff;font-size:13px;font-weight:700">GCP ${p.idx} — ±${p.acc} m</div>
+    <img src="${p.photo}" style="max-width:96vw;max-height:80vh;object-fit:contain;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.6)">
+    <button onclick="this.parentElement.remove()" style="padding:10px 28px;border-radius:24px;border:none;background:#d94000;color:#fff;font-size:14px;font-weight:700;cursor:pointer">✕ Chiudi</button>`;
+  document.body.appendChild(ov);
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+}
+
+// ── EXPORT KML CON FOTO GCP ───────────────────────────────────────────────────
+// Sovrascrive exportKML aggiungendo i segnaposti GCP con balloon foto
+function buildGCPKMLPlacemarks() {
+  if (!gcpFieldPoints.length) return '';
+  return gcpFieldPoints.map(p => {
+    const desc = p.photo
+      ? `<![CDATA[<div style="font-family:sans-serif;font-size:13px"><b>GCP ${p.idx}</b><br>±${p.acc} m<br><img src="${p.photo}" style="max-width:300px;margin-top:8px;border-radius:6px"></div>]]>`
+      : `<![CDATA[<b>GCP ${p.idx}</b><br>±${p.acc} m<br><i>Nessuna foto allegata</i>]]>`;
+    return `<Placemark>
+  <name>GCP ${p.idx}</name>
+  <description>${desc}</description>
+  <Style><IconStyle><color>ff0000d9</color><scale>1.2</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/target.png</href></Icon></IconStyle></Style>
+  <Point><coordinates>${p.lng.toFixed(10)},${p.lat.toFixed(10)},0</coordinates></Point>
+</Placemark>`;
+  }).join('\n');
+}
+
+function clearGCPField() {
+  gcpFieldPoints = [];
+  renderGCPFieldList();
+  if (gcpFieldLayer) { map.removeLayer(gcpFieldLayer); gcpFieldLayer = null; }
+  document.getElementById('gcp-gps-status').style.display = 'none';
+  updateGCPExportBtn();
+  toast('GCP cancellati');
+}
+
+function renderGCPFieldMap() {
+  if (gcpFieldLayer) { map.removeLayer(gcpFieldLayer); gcpFieldLayer = null; }
+  if (!gcpFieldPoints.length) return;
+  const grp = L.layerGroup();
+  gcpFieldPoints.forEach(p => {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:28px;height:28px;border-radius:50%;background:#d94000;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:11px">${p.idx}</div>`,
+      iconSize: [28, 28], iconAnchor: [14, 14]
+    });
+    L.marker([p.lat, p.lng], { icon, zIndexOffset: 900 })
+      .bindTooltip(`GCP ${p.idx} — ±${p.acc} m`, { permanent: false })
+      .addTo(grp);
+    if (p.acc > 0) L.circle([p.lat, p.lng], { radius: p.acc, color: '#d94000', fillColor: '#d94000', fillOpacity: 0.08, weight: 1.5, dashArray: '4,4' }).addTo(grp);
+  });
+  gcpFieldLayer = grp.addTo(map);
+}
+
+// Costruisce i waypoint GCP da inserire nel CSV (discesa, sosta, risalita)
+function buildGCPFieldWPs(missionAlt, gcpAlt, gcpStay) {
+  if (!gcpFieldPoints.length) return [];
+  const wps = [];
+  gcpFieldPoints.forEach(p => {
+    // WP discesa: quota GCP
+    wps.push({ lat: p.lat, lng: p.lng, alt: gcpAlt, _isGCP: true, _stay: gcpStay, _phase: 'down' });
+    // WP risalita: stessa posizione, torna a quota missione
+    wps.push({ lat: p.lat, lng: p.lng, alt: missionAlt, _isGCP: true, _stay: 0, _phase: 'up' });
+  });
+  return wps;
+}
+
+// ── DFLIGHT ───────────────────────────────────────────────────────────────────
+let dflightOn=false,dflightLayer=null,dflightLoading=false,dflightApiKey='80741baaea853abd0e1cac2b03d0d143';
+const AS={0:{c:'#888'},1:{c:'#ff8c00'},2:{c:'#ffcc00'},3:{c:'#c0000a'},4:{c:'#c0000a'},5:{c:'#8800cc'},6:{c:'#0066cc'},7:{c:'#ff8c00'},13:{c:'#ff8c00'},17:{c:'#ffcc00'},18:{c:'#ffcc00'},def:{c:'#0066cc'}};
+function asStyle(t){return AS[t]||AS.def;}
+function asName(t){return({0:'Other',1:'Restricted',2:'Danger',3:'Prohibited',4:'CTR',5:'TMZ',6:'RMZ',7:'TMA',13:'ATZ',17:'Alert',18:'Warning'})[t]||'Airspace';}
+async function loadDFlightZones(){
+  if(!dflightApiKey)return;
+  if(dflightLoading)return;dflightLoading=true;
+  const btn=document.getElementById('btn-dflight');btn.textContent='⏳';
+  const b=map.getBounds(),bbox=`${b.getWest().toFixed(4)},${b.getSouth().toFixed(4)},${b.getEast().toFixed(4)},${b.getNorth().toFixed(4)}`;
+  try{
+    const resp=await fetch(`https://api.core.openaip.net/api/airspaces?bbox=${bbox}&country=IT&limit=100&fields=name,type,geometry,lowerLimit,upperLimit`,{headers:{'x-openaip-api-key':dflightApiKey,'Accept':'application/json'}});
+    if(resp.status===401||resp.status===403){toast('⚠ API key non valida');dflightLoading=false;btn.textContent='🚫';return;}
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json(),items=data.items||data.data||[];
+    if(dflightLayer){map.removeLayer(dflightLayer);dflightLayer=null;}
+    if(!items.length){toast('ℹ Nessuna zona aerea');dflightLoading=false;btn.textContent='🚫';return;}
+    dflightLayer=L.layerGroup();
+    items.forEach(item=>{
+      if(!item.geometry)return;const t=item.type||0,st=asStyle(t);
+      try{L.geoJSON(item.geometry,{style:{color:st.c,fillColor:st.c,fillOpacity:0.18,weight:2,opacity:0.85},
+        onEachFeature:(_,l)=>l.bindTooltip(`<strong>${asName(t)}: ${item.name||''}</strong>`,{sticky:true,className:'dflight-tip'})}).addTo(dflightLayer);}catch(e){}
+    });
+    dflightLayer.addTo(map);document.getElementById('btn-dflight').classList.add('dflight-active');
+    document.getElementById('dflight-legend').classList.add('on');
+    toast(`🚫 ${items.length} zone aeree`);map.once('moveend',()=>{if(dflightOn)reloadDFlight();});
+  }catch(e){toast('⚠ '+e.message);}
+  btn.textContent='🚫';dflightLoading=false;
+}
+function reloadDFlight(){if(!dflightOn||!dflightApiKey)return;if(dflightLayer){map.removeLayer(dflightLayer);dflightLayer=null;}loadDFlightZones();}
+function toggleDFlight(){
+  dflightOn=!dflightOn;
+  if(dflightOn)loadDFlightZones();
+  else{if(dflightLayer){map.removeLayer(dflightLayer);dflightLayer=null;}document.getElementById('btn-dflight').classList.remove('dflight-active');document.getElementById('dflight-legend').classList.remove('on');toast('Layer aereo disattivato');}
+}
+function showDFlightKeyModal(){document.getElementById('dflight-modal').style.display='flex';}
+function closeDFlightModal(){document.getElementById('dflight-modal').style.display='none';}
+function saveDFlightKey(){document.getElementById('dflight-modal').style.display='none';}
+
+// ── GPS ───────────────────────────────────────────────────────────────────────
+let gpsOn=false,gpsWatcher=null,gpsMarker=null,gpsCircle=null;
+function toggleGPS(){if(!gpsOn)startGPS();else stopGPS();}
+function startGPS(){
+  const btn=document.getElementById('btn-gps');btn.textContent='⏳';
+  // Geolocation API richiede HTTPS — file:// e content:// non funzionano
+  const proto=location.protocol;
+  const needsHTTPS=(proto==='file:'||proto==='content:');
+  if(!navigator.geolocation||needsHTTPS){
+    toast('⚠ GPS richiede HTTPS — uso posizione da rete (approssimativa)');
+    startGPSFromIP();return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      gpsOn=true;btn.classList.add('gps-active');btn.textContent='📍';
+      updateGPS(pos,false);
+      gpsWatcher=navigator.geolocation.watchPosition(
+        p=>updateGPS(p,false),
+        ()=>{},
+        {enableHighAccuracy:true,timeout:15000,maximumAge:5000});
+    },
+    err=>{
+      const msgs={1:'GPS negato dall\'utente',2:'Posizione non disponibile',3:'GPS timeout'};
+      toast('⚠ '+(msgs[err.code]||'Errore GPS')+' — uso posizione da rete');
+      startGPSFromIP();
+    },
+    {enableHighAccuracy:true,timeout:10000,maximumAge:10000});
+}
+async function startGPSFromIP(){
+  const btn=document.getElementById('btn-gps');
+  const apis=[
+    ()=>fetch('https://ip-api.com/json/?fields=status,lat,lon,city,regionName,country')
+          .then(r=>r.json())
+          .then(d=>d.status==='success'?{lat:d.lat,lng:d.lon,city:d.city,region:d.regionName,country:d.country}:null),
+    ()=>fetch('https://ipapi.co/json/')
+          .then(r=>r.json())
+          .then(d=>d.latitude?{lat:d.latitude,lng:d.longitude,city:d.city,region:d.region,country:d.country_name}:null)
+  ];
+  for(const api of apis){
+    try{
+      const d=await Promise.race([api(),new Promise((_,r)=>setTimeout(()=>r(new Error('to')),6000))]);
+      if(d&&d.lat&&d.lng){
+        gpsOn=true;btn.classList.add('gps-active');btn.textContent='📡';
+        updateGPS({coords:{latitude:d.lat,longitude:d.lng,accuracy:5000}},true);
+        const place=[d.city,d.region,d.country].filter(Boolean).join(', ');
+        toast('📡 Posizione da rete: '+place+' (precisione ~5 km)');
+        // Info nel pannello
+        const el=document.getElementById('gps-info');
+        if(el) el.innerHTML=`📡 <strong>${(+d.lat).toFixed(4)}, ${(+d.lng).toFixed(4)}</strong><br>`+
+          `<span style="color:var(--dim);font-size:10px">Posizione da IP — precisione ~5 km.<br>`+
+          `Per GPS preciso apri il file da un URL HTTPS<br>`+
+          `(es. GitHub Pages o Netlify Drop).</span>`;
+        return;
+      }
+    }catch(e){}
+  }
+  btn.textContent='📍';
+  toast('⚠ Posizione non disponibile — verifica la connessione');
+}
+function updateGPS(pos,approx){
+  const lat=pos.coords.latitude,lng=pos.coords.longitude,acc=pos.coords.accuracy,col=approx?'#e07000':'#0066cc';
+  if(!gpsMarker){
+    gpsCircle=L.circle([lat,lng],{radius:acc,color:col,fillColor:col,fillOpacity:.1,weight:1.5}).addTo(map);
+    const icon=L.divIcon({className:'',html:`<div style="width:20px;height:20px;border-radius:50%;background:${col};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>`,iconSize:[20,20],iconAnchor:[10,10]});
+    gpsMarker=L.marker([lat,lng],{icon,zIndexOffset:1000}).addTo(map);
+    // Zoom: approssimativo → livello città, preciso → livello strada
+    map.setView([lat,lng],approx?12:16);
+  }else{
+    gpsMarker.setLatLng([lat,lng]);
+    gpsCircle.setLatLng([lat,lng]).setRadius(acc);
+  }
+  if(!approx){
+    document.getElementById('gps-info').innerHTML=
+      `📍 <strong>${lat.toFixed(6)}, ${lng.toFixed(6)}</strong><br>Precisione: ${Math.round(acc)} m`;
+  }
+}
+function stopGPS(){
+  gpsOn=false;
+  if(gpsWatcher!==null){navigator.geolocation.clearWatch(gpsWatcher);gpsWatcher=null;}
+  if(gpsMarker){map.removeLayer(gpsMarker);gpsMarker=null;}
+  if(gpsCircle){map.removeLayer(gpsCircle);gpsCircle=null;}
+  document.getElementById('btn-gps').classList.remove('gps-active');
+  document.getElementById('btn-gps').textContent='📍';
+  document.getElementById('gps-info').innerHTML='Premi 📍 sulla mappa per attivare il GPS.';
+}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function sw(n){
+  document.querySelectorAll('.tc').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('t-'+n).classList.add('active');
+  const tb=document.querySelector(`.tab[data-tab="${n}"]`);if(tb)tb.classList.add('active');
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+let tt;function toast(m){const e=document.getElementById('toast');e.textContent=m;e.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>e.classList.remove('on'),2800);}
+
+// ── RANGE ─────────────────────────────────────────────────────────────────────
+function onRng(id,vid,u){document.getElementById(vid).textContent=document.getElementById(id).value+u;}
+function onAltChange(){const H=+document.getElementById('alt').value;document.getElementById('alt-v').textContent=H+' m';updAlt(H);updateSpeedInfo();}
+function onGsdChange(){
+  const g=+document.getElementById('gsd-req').value;document.getElementById('gsd-req-v').textContent=g.toFixed(1)+' cm/px';
+  const H=Math.min(120,Math.max(20,Math.round(CAM.H_from_gsd(g)/5)*5));
+  document.getElementById('alt').value=H;document.getElementById('alt-v').textContent=H+' m';updAlt(H);updateSpeedInfo();
+}
+function updAlt(H){
+  const gsd=CAM.gsd_cm(H);
+  document.getElementById('alt-info').innerHTML=`GSD reale: <strong style="color:var(--acc)">${gsd.toFixed(2)} cm/px</strong><br>Footprint: <strong>${CAM.fp_w(H).toFixed(1)} m</strong> × <strong>${CAM.fp_h(H).toFixed(1)} m</strong><br>Quota max GSD≤5: <strong>${Math.round(CAM.H_from_gsd(5))} m</strong>`;
+}
+function updateSpeedInfo(){
+  const H=+document.getElementById('alt').value,ovl=+document.getElementById('ovl').value/100,tint=+document.getElementById('tint').value;
+  const ds=CAM.fp_h(H)*(1-ovl),v=ds/tint,vkh=v*3.6;
+  const l_px=(v*CAM.t_sc*CAM.FR_calc/H)/CAM.pw_h,l_gnd=l_px*CAM.gsd_cm(H)/100;
+  const col=l_px<0.5?'var(--acc3)':l_px<1?'#e07000':'var(--acc2)',icon=l_px<0.5?'✓':l_px<1?'⚠':'✕';
+  document.getElementById('speed-info').innerHTML=`Dist. scatti: <strong style="color:var(--acc)">${ds.toFixed(2)} m</strong> · Velocità: <strong style="color:var(--acc)">${vkh.toFixed(1)} km/h</strong><br>Trascinamento: <strong style="color:${col}">${l_px.toFixed(2)} px — ${l_gnd.toFixed(3)} m ${icon}</strong><br><span style="font-size:11px;color:var(--dim)">Limite fotogrammetrico: &lt;1 px — ottimale: &lt;0.5 px</span>`;
+}
+updAlt(80);updateSpeedInfo();
+
+// ── PERSISTENZA ───────────────────────────────────────────────────────────────
+const PK=['alt','ovl','ovt','tint','angle','gpitch','csize','tdel','gsd-req'];
+function saveParams(){try{const p={};PK.forEach(k=>{const e=document.getElementById(k);if(e)p[k]=e.value;});localStorage.setItem('dsp_params',JSON.stringify(p));}catch(e){}}
+function loadParams(){
+  try{const raw=localStorage.getItem('dsp_params');if(!raw)return;const p=JSON.parse(raw);
+    PK.forEach(k=>{const e=document.getElementById(k);if(e&&p[k]!==undefined)e.value=p[k];});
+    onAltChange();onRng('ovl','ovl-v','%');updateSpeedInfo();onRng('ovt','ovt-v','%');onRng('tint','tint-v',' s');onRng('angle','angle-v','°');onRng('gpitch','gpitch-v','°');onRng('csize','csize-v',' m');onRng('tdel','tdel-v',' s');onGsdChange();
+  }catch(e){}
+}
+PK.forEach(k=>{const e=document.getElementById(k);if(e)e.addEventListener('input',saveParams);});
+
+// ── POLIGONO ──────────────────────────────────────────────────────────────────
+let drawing=false,vertices=[],markers=[],polyL=null,stripesL=null,result=null,missionWPs=[];
+let polygonClosed=false;
+loadParams();
+
+function startDraw(){clearAll();drawing=true;polygonClosed=false;document.getElementById('dstat').classList.add('on');document.getElementById('bfin').disabled=false;document.getElementById('mcross').classList.add('on');map.getContainer().style.cursor='crosshair';toast('Tocca la mappa · doppio tap = chiudi');}
+map.on('click',e=>{
+  if(drawing){addV(e.latlng.lat,e.latlng.lng);}
+  else if(linearDrawing){addLP(e.latlng.lat,e.latlng.lng);}
+  else if(measureOn){addMeasurePoint(e.latlng.lat,e.latlng.lng);}
+});
+map.on('dblclick',e=>{
+  if(measureOn&&measurePts.length>=3){L.DomEvent.stop(e);closeMeasureArea();}
+  else if(drawing&&vertices.length>=3){L.DomEvent.stop(e);finishDraw();}
+  else if(linearDrawing&&linearAxis.length>=2){L.DomEvent.stop(e);finishLinearDraw();}
+});
+
+function addV(lat,lng){
+  vertices.push({lat,lng});
+  const mk=L.circleMarker([lat,lng],{radius:6,color:'#0066cc',fillColor:'#0066cc',fillOpacity:1,weight:2}).addTo(map);
+  mk.bindTooltip(String(vertices.length),{permanent:true,direction:'right'});markers.push(mk);redrawPoly();updWPList();
+}
+function finishDraw(){
+  if(vertices.length<3){toast('⚠ Almeno 3 vertici');return;}
+  drawing=false;polygonClosed=true;document.getElementById('dstat').classList.remove('on');document.getElementById('bfin').disabled=true;document.getElementById('mcross').classList.remove('on');map.getContainer().style.cursor='';redrawPoly(true);toast('✓ '+vertices.length+' vertici');sw('params');
+}
+function clearAll(){
+  drawing=false;vertices=[];polygonClosed=false;markers.forEach(m=>map.removeLayer(m));markers=[];
+  if(polyL){map.removeLayer(polyL);polyL=null;}if(stripesL){map.removeLayer(stripesL);stripesL=null;}
+  missionWPs=[];result=null;
+  linearDrawing=false;linearAxis=[];linearMarkers.forEach(m=>map.removeLayer(m));linearMarkers=[];
+  if(linearAxisLayer){map.removeLayer(linearAxisLayer);linearAxisLayer=null;}
+  if(linearStripesLayer){map.removeLayer(linearStripesLayer);linearStripesLayer=null;}
+  linearResultWPs=[];linearResult=null;
+  ['_crosshatchLayer','_perimeterLayer','_linearPerimLayer'].forEach(k=>{if(map[k]){map.removeLayer(map[k]);map[k]=null;}});
+  if(gcpLayer){map.removeLayer(gcpLayer);gcpLayer=null;}
+  document.getElementById('dstat').classList.remove('on');document.getElementById('bfin').disabled=true;
+  if(document.getElementById('dstat-lin'))document.getElementById('dstat-lin').style.display='none';
+  if(document.getElementById('bfin-lin'))document.getElementById('bfin-lin').disabled=true;
+  document.getElementById('mcross').classList.remove('on');map.getContainer().style.cursor='';
+  updWPList();document.getElementById('res-content').style.display='none';document.getElementById('res-empty').style.display='block';
+}
+function redrawPoly(closed=false){
+  if(polyL){map.removeLayer(polyL);polyL=null;}if(vertices.length<2)return;
+  const lls=vertices.map(v=>[v.lat,v.lng]);
+  polyL=(closed?L.polygon:L.polyline)(closed?lls:[...lls,lls[0]],{color:'#0066cc',weight:3,dashArray:closed?null:'8,5',fillColor:'#0066cc',fillOpacity:closed?.1:.04}).addTo(map);
+}
+function updWPList(){
+  if(surveyMode==='linear'){updWPListLinear();return;}
+  const el=document.getElementById('wplist');
+  if(!vertices.length){el.innerHTML='<div style="padding:10px;text-align:center;color:var(--dim)">Nessun vertice</div>';return;}
+  el.innerHTML=vertices.map((v,i)=>`<div class="wpr"><span class="wpi">${i+1}</span><span>${v.lat.toFixed(6)}, ${v.lng.toFixed(6)}</span></div>`).join('');
+}
+
+// ── CERCA ─────────────────────────────────────────────────────────────────────
+async function doSearch(){
+  const q=document.getElementById('srch').value.trim();if(!q)return;
+  try{const r=await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`);const d=await r.json();
+    if(d.length){map.setView([+d[0].lat,+d[0].lon],16);toast('📍 '+d[0].display_name.split(',')[0]);}else toast('⚠ Luogo non trovato');
+  }catch(e){toast('⚠ Errore ricerca');}
+}
+
+// ── GEOMETRIA ─────────────────────────────────────────────────────────────────
+const Re=6371000,RAD=Math.PI/180,DEG=180/Math.PI;
+const toR=d=>d*RAD,toD=r=>r*DEG;
+function hav(a,b){const dl=toR(b.lat-a.lat),dn=toR(b.lng-a.lng),s=Math.sin(dl/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dn/2)**2;return Re*2*Math.atan2(Math.sqrt(s),Math.sqrt(1-s));}
+function polyArea(V){const n=V.length;if(n<3)return 0;const lo=V[0].lat,ln0=V[0].lng;const P=V.map(v=>({x:toR(v.lng-ln0)*Re*Math.cos(toR(lo)),y:toR(v.lat-lo)*Re}));let a=0;for(let i=0;i<n;i++){const j=(i+1)%n;a+=P[i].x*P[j].y-P[j].x*P[i].y;}return Math.abs(a/2);}
+function rotBB(V,adeg){
+  const a=toR(adeg),cx=V.reduce((s,v)=>s+v.lat,0)/V.length,cy=V.reduce((s,v)=>s+v.lng,0)/V.length;
+  const P=V.map(v=>({x:toR(v.lng-cy)*Re*Math.cos(toR(cx)),y:toR(v.lat-cx)*Re}));
+  const rot=P.map(p=>({x:p.x*Math.cos(-a)-p.y*Math.sin(-a),y:p.x*Math.sin(-a)+p.y*Math.cos(-a)}));
+  return{minX:Math.min(...rot.map(p=>p.x)),maxX:Math.max(...rot.map(p=>p.x)),minY:Math.min(...rot.map(p=>p.y)),maxY:Math.max(...rot.map(p=>p.y)),cx,cy,rot};
+}
+function m2ll(mx,my,cx,cy,adeg){const a=toR(adeg),rx=mx*Math.cos(a)-my*Math.sin(a),ry=mx*Math.sin(a)+my*Math.cos(a);return{lat:cx+toD(ry/Re),lng:cy+toD(rx/(Re*Math.cos(toR(cx))))}}
+function bearing(a,b){const dL=toR(b.lng-a.lng),la=toR(a.lat),lb=toR(b.lat),y=Math.sin(dL)*Math.cos(lb),x=Math.cos(la)*Math.sin(lb)-Math.sin(la)*Math.cos(lb)*Math.cos(dL);return(toD(Math.atan2(y,x))+360)%360;}
+function autoAngle(){
+  if(vertices.length<3){toast('⚠ Prima disegna il poligono');return;}if(!polygonClosed){toast('⚠ Chiudi prima il poligono');return;}
+  let best=0,bestA=Infinity;
+  for(let a=0;a<180;a+=2){const bb=rotBB(vertices,a),ar=(bb.maxX-bb.minX)*(bb.maxY-bb.minY);if(ar<bestA){bestA=ar;best=a;}}
+  for(let a=best-2;a<=best+2;a+=0.25){const bb=rotBB(vertices,a),ar=(bb.maxX-bb.minX)*(bb.maxY-bb.minY);if(ar<bestA){bestA=ar;best=a;}}
+  const ang=Math.round(best);document.getElementById('angle').value=ang;document.getElementById('angle-v').textContent=ang+'°';toast('Angolo: '+ang+'°');
+}
+
+// ── INTERSEZIONI POLIGONO ─────────────────────────────────────────────────────
+function segIntX(lx,A,B){const dx=B.x-A.x;if(Math.abs(dx)<1e-10)return null;const t=(lx-A.x)/dx;if(t<0||t>1)return null;return A.y+t*(B.y-A.y);}
+function stripIntersections(lx,polyRot){
+  const ys=[],n=polyRot.length;
+  for(let i=0;i<n;i++){const y=segIntX(lx,polyRot[i],polyRot[(i+1)%n]);if(y!==null)ys.push(y);}
+  return ys.sort((a,b)=>a-b);
+}
+function pointInPolygon(pt,poly){let ins=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const xi=poly[i].lng,yi=poly[i].lat,xj=poly[j].lng,yj=poly[j].lat;if(((yi>pt.lat)!==(yj>pt.lat))&&(pt.lng<(xj-xi)*(pt.lat-yi)/(yj-yi)+xi))ins=!ins;}return ins;}
+
+// ── COSTANTI ──────────────────────────────────────────────────────────────────
+const LITCHI_WP_MAX=99,MAX_FUEL_MIN=15,MAX_BATTERIES=4;
+const FUEL_COLORS=['#1a7a00','#0066cc','#8b6000','#cc0000'],FUEL_LABELS=['1ª','2ª','3ª','4ª'];
+const CSV_HDR='latitude,longitude,altitude(m),heading(deg),curvesize(m),rotationdir,gimbalmode,gimbalpitchangle,actiontype1,actionparam1,actiontype2,actionparam2,actiontype3,actionparam3,actiontype4,actionparam4,actiontype5,actionparam5,actiontype6,actionparam6,actiontype7,actionparam7,actiontype8,actionparam8,actiontype9,actionparam9,actiontype10,actionparam10,actiontype11,actionparam11,actiontype12,actionparam12,actiontype13,actionparam13,actiontype14,actionparam14,actiontype15,actionparam15,altitudemode,speed(m/s),poi_latitude,poi_longitude,poi_altitude(m),poi_altitudemode,photo_timeinterval,photo_distinterval';
+
+function onCrosshatchChange(){const on=document.getElementById('crosshatch').checked;document.getElementById('crosshatch-opts').style.display=on?'block':'none';document.getElementById('gpitch2-row').style.display=on?'block':'none';}
+function onPerimeterChange(){document.getElementById('perimeter-opts').style.display=document.getElementById('perimeter').checked?'block':'none';}
+
+// ── CENTROIDE ─────────────────────────────────────────────────────────────────
+function centroid(verts){return{lat:verts.reduce((s,p)=>s+p.lat,0)/verts.length,lng:verts.reduce((s,p)=>s+p.lng,0)/verts.length};}
+
+// ── PERIMETRO POLIGONO ────────────────────────────────────────────────────────
+// Ogni WP: heading verso centroide + POI centroide a 0 m AGL (quota terreno)
+function buildPerimeterWPs(verts,offsetM,altM){
+  const ctr=centroid(verts);
+  const mLat=111320,mLng=111320*Math.cos(ctr.lat*Math.PI/180);
+  const dLat=offsetM/mLat,dLng=offsetM/mLng;
+  const wps=verts.map(p=>{
+    const dX=ctr.lng-p.lng,dY=ctr.lat-p.lat,len=Math.sqrt(dX*dX+dY*dY)||1;
+    return{lat:p.lat+dY/len*dLat,lng:p.lng+dX/len*dLng,alt:altM};
+  });
+  return{wps:[...wps,{...wps[0]}],centroid:ctr};
+}
+
+// ── CALCOLO MISSIONE POLIGONO ─────────────────────────────────────────────────
+function compute(){
+  if(vertices.length<3){toast('⚠ Prima disegna il poligono');sw('area');return;}
+  if(!polygonClosed){toast('⚠ Chiudi il poligono prima di calcolare');sw('area');finishDraw();if(!polygonClosed)return;}
+
+  const H=+document.getElementById('alt').value,ovl=+document.getElementById('ovl').value/100,ovt=+document.getElementById('ovt').value/100,angle=+document.getElementById('angle').value,tint=+document.getElementById('tint').value,gpitch=+document.getElementById('gpitch').value,csize=+document.getElementById('csize').value,tdel=+document.getElementById('tdel').value;
+  const crosshatch=document.getElementById('crosshatch').checked,H2=crosshatch?+document.getElementById('alt2').value:H,gpitch2=crosshatch?+document.getElementById('gpitch2').value:gpitch;
+  const doPerimeter=document.getElementById('perimeter').checked,pAlt=doPerimeter?+document.getElementById('palt').value:60,pPitch=doPerimeter?+document.getElementById('ppitch').value:-45,pOffset=doPerimeter?+document.getElementById('poffset').value:15;
+
+  const fp_w=CAM.fp_w(H),fp_h=CAM.fp_h(H),gsd=CAM.gsd_cm(H),ds=fp_h*(1-ovl),ss=fp_w*(1-ovt),spd=ds/tint;
+
+  // ── 1° PASSAGGIO ──
+  const bb=rotBB(vertices,angle);
+  const{minX,maxX,cx,cy,rot:polyRot}=bb;
+  const W=maxX-minX,margin=fp_w/2,nMax=Math.ceil((W+2*margin)/ss)+2;
+  const wps=[],lines=[],stripGroups=[];let nScatti=0;
+
+  for(let i=0;i<nMax;i++){
+    const lx=minX-margin+i*ss;if(lx>maxX+margin)break;
+    const ys=stripIntersections(lx,polyRot);if(ys.length<2)continue;
+    // ── FIX: strisciate terminano ESATTAMENTE ai bordi del poligono ──
+    // Rimosso ±fp_h/2 che spingeva i WP fuori dall'area definita
+    let y0=ys[0],y1=ys[ys.length-1];
+    if(lines.length%2!==0)[y0,y1]=[y1,y0];
+    const p0=m2ll(lx,y0,cx,cy,angle),p1=m2ll(lx,y1,cx,cy,angle);lines.push([p0,p1]);
+    const len=Math.abs(y1-y0),nPh=Math.max(2,Math.ceil(len/ds)+1);nScatti+=nPh;
+    const sg=[];for(let j=0;j<nPh;j++){const t=j/(nPh-1),ly=y0+(y1-y0)*t;const wp={...m2ll(lx,ly,cx,cy,angle),alt:H};wps.push(wp);sg.push(wp);}
+    stripGroups.push(sg);
+  }
+  if(!wps.length){toast('⚠ Nessun waypoint');return;}
+
+  // ── 2° PASSAGGIO CROSSHATCH ──
+  let wps2=[],lines2=[],stripGroups2=[],fuels2=[],result2=null;
+  if(crosshatch){
+    const angle2=(angle+90)%180;
+    const fp_w2=CAM.fp_w(H2),fp_h2=CAM.fp_h(H2),gsd2=CAM.gsd_cm(H2),ds2=fp_h2*(1-ovl),ss2=fp_w2*(1-ovt),spd2=ds2/tint;
+    const bb2=rotBB(vertices,angle2);
+    const{minX:mx2,maxX:Mx2,cx:cx2,cy:cy2,rot:polyRot2}=bb2;
+    const W2=Mx2-mx2,margin2=fp_w2/2,nMax2=Math.ceil((W2+2*margin2)/ss2)+2;
+    let nSc2=0;
+    for(let i=0;i<nMax2;i++){
+      const lx=mx2-margin2+i*ss2;if(lx>Mx2+margin2)break;
+      const ys=stripIntersections(lx,polyRot2);if(ys.length<2)continue;
+      // ── FIX crosshatch: stessa correzione ──
+      let y0=ys[0],y1=ys[ys.length-1];
+      if(lines2.length%2!==0)[y0,y1]=[y1,y0];
+      const p0=m2ll(lx,y0,cx2,cy2,angle2),p1=m2ll(lx,y1,cx2,cy2,angle2);lines2.push([p0,p1]);
+      const len=Math.abs(y1-y0),nPh=Math.max(2,Math.ceil(len/ds2)+1);nSc2+=nPh;
+      const sg2=[];for(let j=0;j<nPh;j++){const t=j/(nPh-1),ly=y0+(y1-y0)*t;const wp={...m2ll(lx,ly,cx2,cy2,angle2),alt:H2};wps2.push(wp);sg2.push(wp);}
+      stripGroups2.push(sg2);
+    }
+    fuels2=splitFuels(stripGroups2,spd2,tdel);
+    result2={gsd:gsd2,H:H2,nStrips:lines2.length,nWP:wps2.length,nScatti:nSc2,spd:spd2,ds:ds2,fuels:fuels2,lines:lines2,angle:angle2,gpitch:gpitch2};
+  }
+
+  // ── PERIMETRO ──
+  // FIX: heading calcolato verso il centroide ad ogni WP; POI = centroide a 0 m
+  let perimeterWPs=[],perimeterCentroid=null,perimeterSpd=5;
+  if(doPerimeter&&vertices.length>=3){
+    const pr=buildPerimeterWPs(vertices,pOffset,pAlt);
+    perimeterWPs=pr.wps;perimeterCentroid=pr.centroid;perimeterSpd=Math.min(8,spd);
+  }
+
+  let dist=0;for(let i=1;i<wps.length;i++)dist+=hav(wps[i-1],wps[i]);
+  const nSv=lines.length-1,timeMin=spd>0?((dist/spd+nSv*tdel)/60).toFixed(1):'—',A=polyArea(vertices);
+  const fuels=splitFuels(stripGroups,spd,tdel);
+  missionWPs=wps;
+  const gcpData=computeGCPs(A,vertices);
+  result={gsd,H,nStrips:lines.length,nWP:wps.length,nScatti,area:A,dist,timeMin,spd,ds,tint,gpitch,csize,ovl,ovt,nSvolte:nSv,angle,stripGroups,lines,fuels,crosshatch,result2,gcpData,perimeterWPs,perimeterCentroid,perimeterPitch:pPitch,perimeterSpd,doPerimeter};
+
+  if(stripesL){map.removeLayer(stripesL);stripesL=null;}
+  if(map._crosshatchLayer){map.removeLayer(map._crosshatchLayer);map._crosshatchLayer=null;}
+  if(map._perimeterLayer){map.removeLayer(map._perimeterLayer);map._perimeterLayer=null;}
+
+  renderFuelPlan(fuels,lines);
+
+  if(crosshatch&&lines2.length){
+    const g2=L.layerGroup();lines2.forEach(ln=>L.polyline(ln.map(p=>[p.lat,p.lng]),{color:'#8b6000',weight:2,opacity:.8,dashArray:'8,5'}).addTo(g2));map._crosshatchLayer=g2.addTo(map);
+  }
+  if(doPerimeter&&perimeterWPs.length){
+    const gP=L.layerGroup();
+    L.polyline(perimeterWPs.map(p=>[p.lat,p.lng]),{color:'#1a7a00',weight:2.5,opacity:.85,dashArray:'5,6'}).addTo(gP);
+    L.circleMarker([perimeterWPs[0].lat,perimeterWPs[0].lng],{radius:7,color:'#1a7a00',fillColor:'#1a7a00',fillOpacity:1,weight:2}).bindTooltip('Perim. START').addTo(gP);
+    // marcatore centroide POI
+    if(perimeterCentroid)L.circleMarker([perimeterCentroid.lat,perimeterCentroid.lng],{radius:6,color:'#ff8c00',fillColor:'#ff8c00',fillOpacity:.9,weight:2}).bindTooltip('🎯 POI · centroide · 0 m').addTo(gP);
+    map._perimeterLayer=gP.addTo(map);
+  }
+
+  renderGCPs(gcpData);if(gcpLayer)gcpLayer.addTo(map);
+  refreshFootprintIfOn();
+
+  document.getElementById('r-gsd').textContent=gsd.toFixed(2);document.getElementById('r-alt').textContent=H;document.getElementById('r-str').textContent=lines.length;document.getElementById('r-wp').textContent=wps.length;document.getElementById('r-ph').textContent=nScatti;document.getElementById('r-area').textContent=A>=10000?(A/10000).toFixed(2)+' ha':Math.round(A)+' m²';document.getElementById('r-dist').textContent=Math.round(dist);document.getElementById('r-time').textContent=timeMin;document.getElementById('r-spd').textContent=(spd*3.6).toFixed(1);document.getElementById('r-ds').textContent=ds.toFixed(2);
+
+  const l_px=spd*CAM.t_sc*CAM.FR_calc/H/CAM.pw_h;
+  const wEl=document.getElementById('r-warn'),oEl=document.getElementById('r-ok');let warn='';
+  if(l_px>=1)warn+=`⚠ Trascinamento ${l_px.toFixed(2)} px > 1 px.<br>`;
+  if(fuels.some(f=>f.wps.length>LITCHI_WP_MAX))warn+=`⚠ Alcune batterie superano ${LITCHI_WP_MAX} WP.`;
+  if(warn){wEl.innerHTML=warn;wEl.style.display='block';oEl.style.display='none';}
+  else{oEl.innerHTML=`✓ ${(spd*3.6).toFixed(1)} km/h · Trasc. ${l_px.toFixed(2)} px · ${fuels.length} batteria/e · ${wps.length} WP`;oEl.style.display='block';wEl.style.display='none';}
+
+  document.getElementById('r-notes').innerHTML=`Mini 2 4:3 · ${H} m AGL · GSD ${gsd.toFixed(2)} cm/px<br>Overlap ${Math.round(ovl*100)}% front / ${Math.round(ovt*100)}% lat<br>Dist. scatti: ${ds.toFixed(2)} m · ${tint} s · ${(spd*3.6).toFixed(1)} km/h<br>Trascinamento: ${l_px.toFixed(2)} px<br>Gimbal 1°: ${gpitch}°`+(crosshatch?` · Gimbal 2°: ${gpitch2}°`:'')+`<br>Curvesize: ${csize} m · Batterie: ${fuels.length}`+(crosshatch&&result2?`<br>Crosshatch: ${result2.nStrips} str · ${result2.nWP} WP · ${result2.fuels.length} bat`:'')+(doPerimeter?`<br>Perimetro: ${perimeterWPs.length} WP · ${pAlt}m AGL · gimbal ${pPitch}° · 🎯 heading verso centroide`:'');
+
+  const xhdr=document.getElementById('export-btns');
+  // Bottone perimetro
+  if(doPerimeter&&perimeterWPs.length){
+    const btnP=document.createElement('button');btnP.className='btn bs';btnP.style.cssText='background:#1a7a00;color:#fff';btnP.textContent=`⬇ Perimetro obliquo — CSV (${perimeterWPs.length} WP · heading verso centro)`;btnP.onclick=exportPerimeterCSV;xhdr.appendChild(btnP);
+  }
+  if(crosshatch||doPerimeter){
+    const div=document.createElement('div');div.className='slbl';div.style.marginTop='10px';div.textContent='CSV unificato';xhdr.appendChild(div);
+    const btnU=document.createElement('button');btnU.className='btn bp';const tot=wps.length+(crosshatch&&result2?result2.nWP:0)+(doPerimeter?perimeterWPs.length:0);btnU.textContent=`⬇ Esporta CSV unificato (${tot} WP)`;btnU.onclick=exportUnifiedCSV;xhdr.appendChild(btnU);
+  }
+  renderGCPs(result.gcpData);
+  document.getElementById('res-empty').style.display='none';document.getElementById('res-content').style.display='block';sw('results');
+  toast(`✓ ${wps.length} WP · ${lines.length} str · ${fuels.length} bat`+(crosshatch&&result2?` + ${result2.nStrips} XH`:''));
+  updateGCPExportBtn();
+}
+
+// ── RENDER FUEL PLAN ──────────────────────────────────────────────────────────
+function renderFuelPlan(fuels,lines){
+  const fp=document.getElementById('fuel-plan'),eb=document.getElementById('export-btns');
+  eb.innerHTML='';
+  if(fuels.length===1){
+    fp.innerHTML=`<div class="ob">✓ Una sola batteria — ${(fuels[0].timeS/60).toFixed(1)} min · ${fuels[0].wps.length} WP</div>`;
+    eb.innerHTML=`<button class="btn bs1" onclick="exportCSV(0)">⬇ Esporta CSV Litchi</button>`;
+  }else{
+    let html='';fuels.forEach((f,i)=>{const mins=(f.timeS/60).toFixed(1),over=f.wps.length>LITCHI_WP_MAX||f.timeS/60>MAX_FUEL_MIN+0.5;html+=`<div class="fuel-card${over?' fuel-over':''}"><div class="fuel-badge" style="background:${FUEL_COLORS[i]}">${FUEL_LABELS[i]}</div><div class="fuel-info"><div class="fi-title">Batteria ${i+1}${i>0?' — riprende dall\'ultimo WP':''}</div><div class="fi-sub">${f.wps.length} WP · ${f.stripCount} str · ${mins} min${over?' ⚠':''}</div></div></div>`;});
+    fp.innerHTML=html;let bh='';fuels.forEach((f,i)=>{bh+=`<button class="btn bs${i+1}" onclick="exportCSV(${i})">⬇ Batteria ${i+1} — CSV (${f.wps.length} WP)</button>`;});bh+=`<button class="btn bn" onclick="exportAllCSV()">⬇ Scarica tutti i CSV</button>`;eb.innerHTML=bh;
+  }
+  // Crosshatch CSV
+  if(result&&result.crosshatch&&result.result2){
+    result.result2.fuels.forEach((f,i)=>{const btn=document.createElement('button');btn.className=`btn bs${Math.min(i+1,4)}`;btn.style.opacity='.85';btn.textContent=`⬇ Crosshatch B${i+1} — CSV (${f.wps.length} WP)`;btn.onclick=()=>exportCrosshatchCSV(i);document.getElementById('export-btns').appendChild(btn);});
+  }
+  if(stripesL){map.removeLayer(stripesL);stripesL=null;}
+  const grp=L.layerGroup();let si=0;
+  fuels.forEach((f,fi)=>{const col=FUEL_COLORS[fi];for(let k=0;k<f.stripCount;k++,si++){if(si<lines.length)L.polyline(lines[si].map(p=>[p.lat,p.lng]),{color:col,weight:3,opacity:.95}).addTo(grp);}});
+  fuels.forEach((f,i)=>{const col=FUEL_COLORS[i];L.circleMarker([f.wps[0].lat,f.wps[0].lng],{radius:8,color:col,fillColor:col,fillOpacity:1,weight:2}).bindTooltip(`B${i+1} START`).addTo(grp);L.circleMarker([f.wps[f.wps.length-1].lat,f.wps[f.wps.length-1].lng],{radius:7,color:col,fillColor:'#fff',fillOpacity:1,weight:3}).bindTooltip(`B${i+1} END`).addTo(grp);});
+  stripesL=grp.addTo(map);
+}
+
+// ── EXPORT CSV SINGOLA BATTERIA ───────────────────────────────────────────────
+function buildCSVRows(wps,H,gpitch,tint,csize,spd,poiLat,poiLng){
+  const v=Math.min(15,Math.max(0.5,spd)).toFixed(1),rows=[CSV_HDR];
+  const pLat=poiLat!=null?poiLat.toFixed(10):'0',pLng=poiLng!=null?poiLng.toFixed(10):'0';
+  const hasPoi=poiLat!=null;
+  wps.forEach((wp,i)=>{
+    const ph=i===0?-1:tint,nxt=wps[i+1]||wps[i-1];
+    let hdg=0;
+    if(hasPoi){// heading verso POI centroide
+      hdg=bearing(wp,{lat:poiLat,lng:poiLng});
+    }else if(nxt){hdg=i<wps.length-1?bearing(wp,nxt):bearing(wps[i-1],wp);}
+    rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt||H,Math.round(hdg),csize,0,2,gpitch,5,gpitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,pLat,pLng,hasPoi?0:0,hasPoi?1:0,ph,-1].join(','));
+  });
+  return rows.join('\n');
+}
+function exportCSV(idx){
+  if(!missionWPs.length||!result)return;const f=result.fuels[idx];
+  if(f.wps.length>LITCHI_WP_MAX)toast(`⚠ B${idx+1}: ${f.wps.length} WP > limite Litchi`);
+  const pfx=missionPrefix(); const nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
+  dl(buildCSVRows(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd),nm,'text/csv');
+  toast(`✓ CSV B${idx+1} (${f.wps.length} WP · ${(f.timeS/60).toFixed(1)} min)`);
+}
+function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast(`⬇ ${result.fuels.length} CSV…`);}
+function exportCrosshatchCSV(idx){
+  if(!result||!result.result2)return;const r2=result.result2,f=r2.fuels[idx];
+  dl(buildCSVRows(f.wps,r2.H,r2.gpitch,result.tint,result.csize,r2.spd),missionPrefix()+'_XH_B'+(idx+1)+'.csv','text/csv');
+  toast(`✓ Crosshatch B${idx+1} (${f.wps.length} WP)`);
+}
+
+// ── EXPORT PERIMETRO CSV — heading verso centroide, POI a 0 m ─────────────────
+function exportPerimeterCSV(){
+  if(!result||!result.perimeterWPs||!result.perimeterWPs.length){toast('⚠ Nessun perimetro');return;}
+  const wps=result.perimeterWPs,pc=result.perimeterCentroid,pitch=result.perimeterPitch,tint=result.tint,csize=result.csize,spd=result.perimeterSpd;
+  dl(buildCSVRows(wps,wps[0].alt,pitch,tint,csize,spd,pc?pc.lat:null,pc?pc.lng:null),missionPrefix()+'_perim.csv','text/csv');
+  toast(`✓ CSV perimetro (${wps.length} WP · 🎯 heading centroide)`);
+}
+
+// ── EXPORT CSV UNIFICATO ──────────────────────────────────────────────────────
+function exportUnifiedCSV(){
+  if(!result)return;
+  const allWPs=[];
+  result.fuels.forEach(f=>f.wps.forEach(wp=>allWPs.push({...wp,_gpitch:result.gpitch,_spd:result.spd,_tint:result.tint,_csize:result.csize,_poi:null})));
+  if(result.crosshatch&&result.result2)result.result2.fuels.forEach(f=>f.wps.forEach(wp=>allWPs.push({...wp,_gpitch:result.result2.gpitch,_spd:result.result2.spd,_tint:result.tint,_csize:result.csize,_poi:null})));
+  if(result.perimeterWPs&&result.perimeterWPs.length)result.perimeterWPs.forEach(wp=>allWPs.push({...wp,_gpitch:result.perimeterPitch,_spd:result.perimeterSpd,_tint:result.tint,_csize:result.csize,_poi:result.perimeterCentroid}));
+  if(!allWPs.length)return;
+  const splits=splitWPsByTime(allWPs,MAX_FUEL_MIN*60,result.spd);
+  splits.forEach((seg,i)=>{
+    setTimeout(()=>{
+      const rows=[CSV_HDR];
+      seg.forEach((wp,j)=>{
+        const nxt=seg[j+1]||seg[j-1],prv=seg[j-1];const ph=j===0?-1:wp._tint,v=Math.min(15,Math.max(0.5,wp._spd)).toFixed(1);
+        let hdg=0,pLat='0',pLng='0',pAM=0;
+        if(wp._poi){hdg=bearing(wp,wp._poi);pLat=wp._poi.lat.toFixed(10);pLng=wp._poi.lng.toFixed(10);pAM=1;}
+        else if(nxt)hdg=j<seg.length-1?bearing(wp,nxt):bearing(prv,wp);
+        rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt||result.H,Math.round(hdg),wp._csize,0,2,wp._gpitch,5,wp._gpitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,pLat,pLng,0,pAM,ph,-1].join(','));
+      });
+      const _pfx=missionPrefix(); dl(rows.join('\n'),splits.length===1?(_pfx+'_unif.csv'):(_pfx+'_unif_B'+(i+1)+'.csv'),'text/csv');
+    },i*400);
+  });
+  toast(`⬇ CSV unificato in ${splits.length} batteria/e`);
+}
+function splitWPsByTime(wps,maxS,refSpd){
+  const segs=[];let cur=[],t=0;
+  for(let i=0;i<wps.length;i++){const spd=wps[i]._spd||refSpd||5,d=i>0?hav(wps[i-1],wps[i]):0,dt=spd>0?d/spd:0;
+    if(cur.length>0&&t+dt>maxS){segs.push(cur);cur=[{...wps[i-1]}];t=0;}cur.push(wps[i]);t+=dt;}
+  if(cur.length)segs.push(cur);return segs;
+}
+
+// ── SPLIT FUEL ────────────────────────────────────────────────────────────────
+function splitFuels(sgs,spd,tdel){
+  if(!sgs.length)return[];
+  const fuels=[];let curWPs=[],curStrips=0,curDist=0,curTime=0;
+  for(let si=0;si<sgs.length;si++){
+    const strip=sgs[si];if(!strip.length)continue;
+    let sd=0;const jd=curWPs.length>0?hav(curWPs[curWPs.length-1],strip[0]):0;
+    for(let k=1;k<strip.length;k++)sd+=hav(strip[k-1],strip[k]);
+    const tot=sd+jd,add=(si>0&&curStrips>0)?tdel*0.5:0,st=(spd>0?tot/spd:0)+add;
+    if(curWPs.length>0&&((curTime+st)/60>MAX_FUEL_MIN+1.5||curWPs.length+strip.length>LITCHI_WP_MAX)){
+      if(fuels.length>=MAX_BATTERIES-1){curWPs=curWPs.concat(strip);curStrips++;curTime+=st;curDist+=tot;}
+      else{fuels.push({wps:[...curWPs],stripCount:curStrips,timeS:curTime,dist:curDist});const ov=curWPs[curWPs.length-1];curWPs=[ov,...strip];curStrips=1;const od=hav(ov,strip[0]);curDist=od+sd;curTime=spd>0?curDist/spd:0;}
+    }else{curWPs=curWPs.concat(strip);curStrips++;curTime+=st;curDist+=tot;}
+  }
+  if(curWPs.length)fuels.push({wps:curWPs,stripCount:curStrips,timeS:curTime,dist:curDist});return fuels;
+}
+
+// ── GCP ───────────────────────────────────────────────────────────────────────
+let gcpLayer=null;
+function computeGCPs(areaSqm,poly){
+  const aH=areaSqm/10000;let n;
+  if(aH<=2)n=5;else if(aH<=5)n=6;else if(aH<=10)n=7;else if(aH<=25)n=9;else if(aH<=50)n=12;else if(aH<=100)n=15;else n=Math.min(25,Math.round(aH*0.15));
+  const nCP=Math.max(2,Math.round(n/3)),pts=gcpPos(poly,n);return{n,nCP,aH,pts};
+}
+function gcpPos(poly,n){
+  // Campiona una griglia densa DENTRO il poligono, poi seleziona n punti
+  // ben distribuiti usando un approccio greedy di massima distanza minima.
+  const lats=poly.map(p=>p.lat),lngs=poly.map(p=>p.lng);
+  const minLat=Math.min(...lats),maxLat=Math.max(...lats),minLng=Math.min(...lngs),maxLng=Math.max(...lngs);
+  const dLat=maxLat-minLat,dLng=maxLng-minLng;
+
+  // 1) Costruisce griglia candidati interni con margine 8%
+  const mg=0.08,steps=30,cands=[];
+  for(let r=0;r<=steps;r++)for(let cc=0;cc<=steps;cc++){
+    const lat=minLat+dLat*(mg+r/steps*(1-2*mg));
+    const lng=minLng+dLng*(mg+cc/steps*(1-2*mg));
+    if(pointInPolygon({lat,lng},poly))cands.push({lat,lng});
+  }
+  // Fallback: se poligono molto stretto, abbassa il margine
+  if(cands.length<n){
+    for(let r=0;r<=steps;r++)for(let cc=0;cc<=steps;cc++){
+      const lat=minLat+dLat*(0.02+r/steps*0.96);
+      const lng=minLng+dLng*(0.02+cc/steps*0.96);
+      if(pointInPolygon({lat,lng},poly)&&!cands.find(c=>Math.abs(c.lat-lat)<1e-9))cands.push({lat,lng});
+    }
+  }
+  if(!cands.length)return[];
+
+  // 2) Selezione greedy: primo punto = più vicino al centroide,
+  //    poi ogni punto successivo massimizza la distanza minima dai già scelti.
+  const ctr={lat:(minLat+maxLat)/2,lng:(minLng+maxLng)/2};
+  const dist2=(a,b)=>{const dlat=a.lat-b.lat,dlng=(a.lng-b.lng)*Math.cos(a.lat*Math.PI/180);return dlat*dlat+dlng*dlng;};
+  let best=cands.reduce((b,c)=>dist2(c,ctr)<dist2(b,ctr)?c:b,cands[0]);
+  const chosen=[best];
+  while(chosen.length<n&&chosen.length<cands.length){
+    let maxMin=-1,pick=null;
+    for(const c of cands){
+      if(chosen.includes(c))continue;
+      const md=Math.min(...chosen.map(s=>dist2(c,s)));
+      if(md>maxMin){maxMin=md;pick=c;}
+    }
+    if(!pick)break;
+    chosen.push(pick);
+  }
+  return chosen;
+}
+function renderGCPs(g){
+  const{n,nCP,aH,pts}=g;
+  document.getElementById('gcp-section').innerHTML=`<div class="sg" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:8px"><div class="sc"><div class="v" style="color:#1a7a00">${n}</div><div class="u">punti</div><div class="l">GCP consigliati</div></div><div class="sc"><div class="v" style="color:#8b6000">${nCP}</div><div class="u">punti</div><div class="l">Checkpoints</div></div><div class="sc"><div class="v" style="color:var(--acc)">${aH.toFixed(1)}</div><div class="u">ha</div><div class="l">Area</div></div></div><div class="ib" style="font-size:11px"><strong>Posizionamento:</strong> angoli + distribuzione interna.<br><strong>Checkpoints:</strong> non usarli nel processing — solo verifica RMSE.<br><strong>Target:</strong> min 60×60 cm, ad alta visibilità.</div><button class="btn bn" style="margin-bottom:6px" onclick="toggleGCPLayer()">📍 Mostra/nascondi GCP</button><button class="btn bn" onclick="exportGCPCSV()">⬇ Esporta GCP CSV</button>`;
+  if(gcpLayer){map.removeLayer(gcpLayer);gcpLayer=null;}
+  const grp=L.layerGroup();
+  pts.forEach((p,i)=>{const iC=i>=n-nCP,col=iC?'#8b6000':'#1a7a00',lbl=iC?`CP${i-n+nCP+1}`:`GCP${i+1}`;L.circleMarker([p.lat,p.lng],{radius:9,color:col,fillColor:col,fillOpacity:.85,weight:2}).bindTooltip(`<strong>${lbl}</strong><br>${iC?'Checkpoint':'GCP'}`).addTo(grp);const d=0.00012;L.polyline([[p.lat-d,p.lng],[p.lat+d,p.lng]],{color:col,weight:2}).addTo(grp);L.polyline([[p.lat,p.lng-d/Math.cos(p.lat*Math.PI/180)],[p.lat,p.lng+d/Math.cos(p.lat*Math.PI/180)]],{color:col,weight:2}).addTo(grp);});
+  gcpLayer=grp;
+}
+function toggleGCPLayer(){if(!gcpLayer)return;if(map.hasLayer(gcpLayer)){map.removeLayer(gcpLayer);toast('GCP nascosti');}else{gcpLayer.addTo(map);toast('GCP visibili');}}
+function exportGCPCSV(){if(!result||!result.gcpData)return;const{n,nCP,pts}=result.gcpData,rows=['ID,Type,Latitude,Longitude,Elevation_m,Note'];pts.forEach((p,i)=>{const iC=i>=n-nCP,id=iC?`CP${i-n+nCP+1}`:`GCP${i+1}`;rows.push(`${id},${iC?'Checkpoint':'GCP'},${p.lat.toFixed(8)},${p.lng.toFixed(8)},0,${iC?'Checkpoint - non usare nel processing':'GCP'}`);});dl(rows.join('\n'),'GCP_placeholders.csv','text/csv');toast('⬇ CSV GCP esportato');}
+
+// ── MODALITÀ LINEARE ──────────────────────────────────────────────────────────
+let surveyMode='polygon';
+let linearDrawing=false,linearAxis=[],linearMarkers=[],linearAxisLayer=null,linearStripesLayer=null,linearResultWPs=[],linearResult=null;
+
+function setMode(m){
+  surveyMode=m;clearAll();
+  document.getElementById('btn-mode-poly').classList.toggle('active',m==='polygon');
+  document.getElementById('btn-mode-linear').classList.toggle('active',m==='linear');
+  document.getElementById('polygon-draw').classList.toggle('off',m==='linear');
+  document.getElementById('linear-draw').classList.toggle('on',m==='linear');
+  document.getElementById('linear-params').classList.toggle('on',m==='linear');
+  document.querySelector('[onclick="autoAngle()"]').style.display=m==='linear'?'none':'';
+  toast(m==='linear'?'〰 Modalità lineare':'▪ Modalità poligono');
+}
+function startLinearDraw(){clearAll();linearDrawing=true;document.getElementById('dstat-lin').style.display='block';document.getElementById('bfin-lin').disabled=false;document.getElementById('mcross').classList.add('on');map.getContainer().style.cursor='crosshair';toast('Tocca la mappa · doppio tap = fine');}
+function addLP(lat,lng){
+  linearAxis.push({lat,lng});
+  const mk=L.circleMarker([lat,lng],{radius:6,color:'#d94000',fillColor:'#d94000',fillOpacity:1,weight:2}).addTo(map);
+  mk.bindTooltip(String(linearAxis.length),{permanent:true,direction:'right'});linearMarkers.push(mk);redrawLinearAxis();updWPListLinear();
+}
+function redrawLinearAxis(){if(linearAxisLayer){map.removeLayer(linearAxisLayer);linearAxisLayer=null;}if(linearAxis.length<2)return;linearAxisLayer=L.polyline(linearAxis.map(v=>[v.lat,v.lng]),{color:'#d94000',weight:3,dashArray:'10,6',opacity:.9}).addTo(map);}
+function finishLinearDraw(){if(linearAxis.length<2){toast('⚠ Almeno 2 punti');return;}linearDrawing=false;document.getElementById('dstat-lin').style.display='none';document.getElementById('bfin-lin').disabled=true;document.getElementById('mcross').classList.remove('on');map.getContainer().style.cursor='';toast('✓ Asse tracciato — vai su Parametri');sw('params');}
+function updWPListLinear(){const el=document.getElementById('wplist');if(!linearAxis.length){el.innerHTML='<div style="padding:10px;text-align:center;color:var(--dim)">Nessun punto</div>';return;}el.innerHTML=linearAxis.map((v,i)=>`<div class="wpr"><span class="wpi">${i+1}</span><span>${v.lat.toFixed(6)}, ${v.lng.toFixed(6)}</span></div>`).join('');}
+
+function axisLength(ax){let d=0;for(let i=1;i<ax.length;i++)d+=hav(ax[i-1],ax[i]);return d;}
+function axisToXY(ax){const lat0=ax[0].lat,lng0=ax[0].lng,cL=Math.cos(toR(lat0));return ax.map(p=>({x:toR(p.lng-lng0)*Re*cL,y:toR(p.lat-lat0)*Re}));}
+function xyToLL(x,y,lat0,lng0){const cL=Math.cos(toR(lat0));return{lat:lat0+toD(y/Re),lng:lng0+toD(x/(Re*cL))};}
+
+function buildLinearStrip(axis,offsetM,extM,ds,altM){
+  if(axis.length<2)return[];
+  const lat0=axis[0].lat,lng0=axis[0].lng,pts=axisToXY(axis),ep=[...pts];
+  if(extM>0){const d0x=pts[1].x-pts[0].x,d0y=pts[1].y-pts[0].y,l0=Math.sqrt(d0x*d0x+d0y*d0y)||1;ep.unshift({x:pts[0].x-d0x/l0*extM,y:pts[0].y-d0y/l0*extM});const n=pts.length,dx=pts[n-1].x-pts[n-2].x,dy=pts[n-1].y-pts[n-2].y,ln=Math.sqrt(dx*dx+dy*dy)||1;ep.push({x:pts[n-1].x+dx/ln*extM,y:pts[n-1].y+dy/ln*extM});}
+  const n=ep.length,nrm=[];
+  for(let i=0;i<n;i++){const nl=[];if(i<n-1){const dx=ep[i+1].x-ep[i].x,dy=ep[i+1].y-ep[i].y,l=Math.sqrt(dx*dx+dy*dy)||1;nl.push({nx:dy/l,ny:-dx/l});}if(i>0){const dx=ep[i].x-ep[i-1].x,dy=ep[i].y-ep[i-1].y,l=Math.sqrt(dx*dx+dy*dy)||1;nl.push({nx:dy/l,ny:-dx/l});}let nx=nl.reduce((s,n)=>s+n.nx,0)/nl.length,ny=nl.reduce((s,n)=>s+n.ny,0)/nl.length;const nl2=Math.sqrt(nx*nx+ny*ny)||1,sc=Math.min(3,1/nl2);nrm.push({nx:nx*sc,ny:ny*sc});}
+  const off=ep.map((p,i)=>({x:p.x+nrm[i].nx*offsetM,y:p.y+nrm[i].ny*offsetM}));
+  const FS=Math.min(5,ds/4),dense=[];
+  for(let i=0;i<off.length-1;i++){const A=off[i],B=off[i+1],dx=B.x-A.x,dy=B.y-A.y,sl=Math.sqrt(dx*dx+dy*dy),ns=Math.max(1,Math.ceil(sl/FS));for(let j=0;j<ns;j++){const t=j/ns;dense.push({x:A.x+dx*t,y:A.y+dy*t});}}dense.push(off[off.length-1]);
+  const wps=[{...xyToLL(dense[0].x,dense[0].y,lat0,lng0),alt:altM}];let acc=0;
+  for(let i=1;i<dense.length;i++){const dx=dense[i].x-dense[i-1].x,dy=dense[i].y-dense[i-1].y;acc+=Math.sqrt(dx*dx+dy*dy);if(acc>=ds||i===dense.length-1){wps.push({...xyToLL(dense[i].x,dense[i].y,lat0,lng0),alt:altM});acc=0;}}
+  return wps;
+}
+function onLaltCustomChange(){const on=document.getElementById('lalt-custom').checked;document.getElementById('lalt-strip-rows').style.display=on?'block':'none';if(on)rebuildLaltRows();}
+function rebuildLaltRows(){
+  const nS=+document.getElementById('lstrips').value,ls=+document.getElementById('lstep').value,bH=+document.getElementById('alt').value,offs=buildOffsets(nS,ls);
+  document.getElementById('lalt-strip-rows').innerHTML=offs.map((o,i)=>{const lbl=o===0?'🔴 Centrale':o>0?`→ Destra +${o}m`:`← Sinistra ${o}m`;return`<div class="f" style="margin-bottom:6px"><div class="rv-row"><label style="font-size:11px">${lbl}</label><span class="rv" id="las-v-${i}">${bH} m</span></div><input type="range" id="las-${i}" min="20" max="120" value="${bH}" step="5" oninput="document.getElementById('las-v-${i}').textContent=this.value+' m'"></div>`;}).join('');
+}
+function buildOffsets(nS,ls){const o=[0];for(let k=1;k<=nS;k++){o.push(k*ls);o.push(-k*ls);}o.sort((a,b)=>a-b);return o;}
+function getStripAlts(offs,bH){const custom=document.getElementById('lalt-custom').checked;return offs.map((_,i)=>{if(!custom)return bH;const e=document.getElementById(`las-${i}`);return e?+e.value:bH;});}
+
+function computeLinear(){
+  if(linearAxis.length<2){toast('⚠ Traccia prima l\'asse');sw('area');return;}
+  const H=+document.getElementById('alt').value,ovl=+document.getElementById('ovl').value/100,tint=+document.getElementById('tint').value,gpitch=+document.getElementById('gpitch').value,csize=+document.getElementById('csize').value,tdel=+document.getElementById('tdel').value,nSide=+document.getElementById('lstrips').value,lstep=+document.getElementById('lstep').value,lext=+document.getElementById('lext').value;
+  const gsd=CAM.gsd_cm(H),ds=CAM.fp_h(H)*(1-ovl),spd=ds/tint;
+  const offs=buildOffsets(nSide,lstep),alts=getStripAlts(offs,H);
+  const sgs=[];
+  offs.forEach((off,idx)=>{const aH=alts[idx],sds=CAM.fp_h(aH)*(1-ovl),wps=buildLinearStrip(linearAxis,off,lext,sds,aH);if(!wps.length)return;sgs.push({wps:idx%2===0?wps:[...wps].reverse(),off,aH});});
+  if(!sgs.length){toast('⚠ Nessuna strisciata');return;}
+  const flat=sgs.map(s=>s.wps),fuels=splitFuels(flat,spd,tdel),allWPs=flat.flat();
+  let dist=0;for(let i=1;i<allWPs.length;i++)dist+=hav(allWPs[i-1],allWPs[i]);
+  const tLen=axisLength(linearAxis),w=(nSide*2+1)*lstep,area=tLen*w;
+  linearResultWPs=allWPs;
+  linearResult={gsd,H,spd,ds,tint,gpitch,csize,ovl,nStrips:sgs.length,nWP:allWPs.length,dist,timeMin:spd>0?((dist/spd+(sgs.length-1)*tdel)/60).toFixed(1):'—',area,tLen,w,fuels,stripGroups:flat,stripData:sgs,offs,lstep,nSide,lext,alts};
+  if(linearStripesLayer){map.removeLayer(linearStripesLayer);linearStripesLayer=null;}
+  if(linearAxisLayer){map.removeLayer(linearAxisLayer);linearAxisLayer=null;}
+  const grp=L.layerGroup();
+  sgs.forEach((s,i)=>{const ic=s.off===0,cols=['#0066cc','#1a7a00','#8b6000','#cc0000','#6600cc','#008b8b'],col=ic?'#d94000':cols[Math.floor(Math.abs(s.off)/lstep)%cols.length];L.polyline(s.wps.map(p=>[p.lat,p.lng]),{color:col,weight:ic?3:2.5,opacity:.92}).bindTooltip(ic?'Asse centrale':(s.off>0?`+${s.off}m dx`:`${s.off}m sx`)+` · ${s.aH}m`,{sticky:true}).addTo(grp);});
+  fuels.forEach((f,fi)=>{if(f.wps.length)L.circleMarker([f.wps[0].lat,f.wps[0].lng],{radius:7,color:FUEL_COLORS[fi],fillColor:FUEL_COLORS[fi],fillOpacity:1,weight:2}).bindTooltip(`B${fi+1} START`).addTo(grp);});
+  linearAxisLayer=L.polyline(linearAxis.map(v=>[v.lat,v.lng]),{color:'#d94000',weight:3,dashArray:'10,6',opacity:.75}).addTo(grp);
+  linearAxis.forEach((v,i)=>L.circleMarker([v.lat,v.lng],{radius:5,color:'#d94000',fillColor:'#fff',fillOpacity:1,weight:2}).bindTooltip(String(i+1),{permanent:true,direction:'right'}).addTo(grp));
+  linearStripesLayer=grp.addTo(map);
+  document.getElementById('r-gsd').textContent=gsd.toFixed(2);document.getElementById('r-alt').textContent=H;document.getElementById('r-str').textContent=sgs.length;document.getElementById('r-wp').textContent=allWPs.length;document.getElementById('r-ph').textContent=allWPs.length;document.getElementById('r-area').textContent=area>=10000?(area/10000).toFixed(2)+' ha':Math.round(area)+' m²';document.getElementById('r-dist').textContent=Math.round(dist);document.getElementById('r-time').textContent=linearResult.timeMin;document.getElementById('r-spd').textContent=(spd*3.6).toFixed(1);document.getElementById('r-ds').textContent=ds.toFixed(2);
+  const l_px=spd*CAM.t_sc*CAM.FR_calc/H/CAM.pw_h;const wEl=document.getElementById('r-warn'),oEl=document.getElementById('r-ok');
+  if(l_px>1){wEl.innerHTML=`⚠ Trascinamento ${l_px.toFixed(2)} px > 1 px.`;wEl.style.display='block';oEl.style.display='none';}
+  else{oEl.innerHTML=`✓ ${(spd*3.6).toFixed(1)} km/h · Trasc. ${l_px.toFixed(2)} px · ${fuels.length} bat · ${allWPs.length} WP`;oEl.style.display='block';wEl.style.display='none';}
+  // Perimetro lineare
+  const doLP=document.getElementById('perimeter').checked,pAlt=doLP?+document.getElementById('palt').value:60,pPitch=doLP?+document.getElementById('ppitch').value:-45,pOff=doLP?+document.getElementById('poffset').value:15;
+  let lpWPs=[];
+  if(doLP){const maxOff=nSide>0?nSide*lstep:lstep/2;lpWPs=buildLinearPerimeterWPs(linearAxis,maxOff,lext,pAlt,pOff);if(map._linearPerimLayer){map.removeLayer(map._linearPerimLayer);map._linearPerimLayer=null;}const pg=L.layerGroup();L.polyline(lpWPs.map(p=>[p.lat,p.lng]),{color:'#1a7a00',weight:2.5,dashArray:'6,5',opacity:.85}).addTo(pg);if(lpWPs.length)L.circleMarker([lpWPs[0].lat,lpWPs[0].lng],{radius:7,color:'#1a7a00',fillColor:'#1a7a00',fillOpacity:1,weight:2}).bindTooltip('Perim. START').addTo(pg);map._linearPerimLayer=pg.addTo(map);}
+  else{if(map._linearPerimLayer){map.removeLayer(map._linearPerimLayer);map._linearPerimLayer=null;}}
+  linearResult.perimWPs=lpWPs;linearResult.pPitch=pPitch;linearResult.doPerim=doLP;
+  const altNote=document.getElementById('lalt-custom').checked?alts.map((a,i)=>`S${i+1}:${a}m`).join(' · '):`${H}m AGL`;
+  document.getElementById('r-notes').innerHTML=`🌊 Rilievo lineare · Mini 2 4:3<br>Asse: ${tLen.toFixed(0)} m · Largh: ${w.toFixed(0)} m · ${nSide*2+1} strisciate<br>Passo lat: ${lstep} m · Estensione: ${lext} m<br>Quote: ${altNote}<br>GSD: ${gsd.toFixed(2)} cm/px · Overlap ${Math.round(ovl*100)}%<br>Dist. scatti: ${ds.toFixed(2)} m · ${tint} s · ${(spd*3.6).toFixed(1)} km/h`+(doLP?`<br>Perimetro: ${lpWPs.length} WP · ${pAlt}m · ${pPitch}°`:'');
+  document.getElementById('gcp-section').innerHTML='<div class="ib" style="font-size:11px">ℹ GCP ogni 200–300 m lungo l\'asse e ai lati.</div>';
+  const xh=document.getElementById('export-btns');xh.innerHTML='';
+  fuels.forEach((f,i)=>{const b=document.createElement('button');b.className=`btn bs${Math.min(i+1,4)}`;b.textContent=`⬇ Batteria ${i+1} — CSV (${f.wps.length} WP)`;b.onclick=()=>exportLinearCSV(i);xh.appendChild(b);});
+  if(fuels.length>1){const b=document.createElement('button');b.className='btn bn';b.textContent='⬇ Scarica tutti i CSV';b.onclick=()=>fuels.forEach((_,i)=>setTimeout(()=>exportLinearCSV(i),i*400));xh.appendChild(b);}
+  if(doLP&&lpWPs.length){const b=document.createElement('button');b.className='btn bs';b.style.cssText='background:#1a7a00;color:#fff';b.textContent=`⬇ Perimetro lineare — CSV (${lpWPs.length} WP)`;b.onclick=exportLinearPerimCSV;xh.appendChild(b);}
+  document.getElementById('res-empty').style.display='none';document.getElementById('res-content').style.display='block';sw('results');toast(`✓ ${allWPs.length} WP · ${sgs.length} str · ${fuels.length} bat`);
+}
+
+function buildLinearPerimeterWPs(axis,maxOff,extM,pAltM,pOffM){
+  const outerOff=maxOff+pOffM,extOff=extM+pOffM,lat0=axis[0].lat,lng0=axis[0].lng,pts=axisToXY(axis),n=pts.length;
+  const d0x=pts[1].x-pts[0].x,d0y=pts[1].y-pts[0].y,l0=Math.sqrt(d0x*d0x+d0y*d0y)||1;
+  const dnx=pts[n-1].x-pts[n-2].x,dny=pts[n-1].y-pts[n-2].y,ln=Math.sqrt(dnx*dnx+dny*dny)||1;
+  const sP={x:pts[0].x-d0x/l0*extOff,y:pts[0].y-d0y/l0*extOff},eP={x:pts[n-1].x+dnx/ln*extOff,y:pts[n-1].y+dny/ln*extOff};
+  function side(off){const ep=[...pts];ep.unshift(sP);ep.push(eP);const m=ep.length,nr=[];for(let i=0;i<m;i++){const nl=[];if(i<m-1){const dx=ep[i+1].x-ep[i].x,dy=ep[i+1].y-ep[i].y,l=Math.sqrt(dx*dx+dy*dy)||1;nl.push({nx:dy/l,ny:-dx/l});}if(i>0){const dx=ep[i].x-ep[i-1].x,dy=ep[i].y-ep[i-1].y,l=Math.sqrt(dx*dx+dy*dy)||1;nl.push({nx:dy/l,ny:-dx/l});}let nx=nl.reduce((s,n)=>s+n.nx,0)/nl.length,ny=nl.reduce((s,n)=>s+n.ny,0)/nl.length;const nl2=Math.sqrt(nx*nx+ny*ny)||1,sc=Math.min(3,1/nl2);nr.push({nx:nx*sc,ny:ny*sc});}return ep.map((p,i)=>({x:p.x+nr[i].nx*off,y:p.y+nr[i].ny*off}));}
+  const L=side(-outerOff),R=side(+outerOff);
+  return[...L,...R.slice().reverse(),L[0]].map(p=>{const ll=xyToLL(p.x,p.y,lat0,lng0);return{lat:ll.lat,lng:ll.lng,alt:pAltM};});
+}
+
+function exportLinearCSV(idx){
+  if(!linearResult)return;const f=linearResult.fuels[idx],{tint,gpitch,csize,spd}=linearResult,v=Math.min(15,Math.max(0.5,spd)).toFixed(1);
+  const rows=[CSV_HDR];
+  f.wps.forEach((wp,i)=>{const ph=i===0?-1:tint,nxt=f.wps[i+1]||f.wps[i-1],hdg=nxt?(i<f.wps.length-1?bearing(wp,nxt):bearing(f.wps[i-1],wp)):0;rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt||linearResult.H,Math.round(hdg),csize,0,2,gpitch,5,gpitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,0,0,0,0,ph,-1].join(','));});
+  const _lpfx=missionPrefix(); dl(rows.join('\n'),linearResult.fuels.length===1?(_lpfx+'.csv'):(_lpfx+'_B'+(idx+1)+'.csv'),'text/csv');toast(`✓ CSV lin B${idx+1} (${f.wps.length} WP)`);
+}
+function exportLinearPerimCSV(){
+  if(!linearResult||!linearResult.perimWPs||!linearResult.perimWPs.length){toast('⚠ Nessun perimetro lineare');return;}
+  const wps=linearResult.perimWPs,{tint,pPitch,csize,spd}=linearResult,v=Math.min(8,spd).toFixed(1);
+  const cLat=linearAxis.reduce((s,p)=>s+p.lat,0)/linearAxis.length,cLng=linearAxis.reduce((s,p)=>s+p.lng,0)/linearAxis.length;
+  const rows=[CSV_HDR];
+  wps.forEach((wp,i)=>{const ph=i===0?-1:tint,hdg=bearing(wp,{lat:cLat,lng:cLng});rows.push([wp.lat.toFixed(10),wp.lng.toFixed(10),wp.alt,Math.round(hdg),csize,0,2,pPitch,5,pPitch,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,1,v,cLat.toFixed(10),cLng.toFixed(10),0,1,ph,-1].join(','));});
+  dl(rows.join('\n'),missionPrefix()+'_perim.csv','text/csv');toast(`✓ CSV perim lin (${wps.length} WP · 🎯 heading centroide)`);
+}
+
+// ── EXPORT CSV CON GCP DI CAMPO ───────────────────────────────────────────────
+function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
+  const gcpAlt = +document.getElementById('gcp-alt').value;
+  const gcpStay = +document.getElementById('gcp-stay').value;
+  const gcpWPs = buildGCPFieldWPs(H, gcpAlt, gcpStay);
+  if (!gcpWPs.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+
+  // Intercala i GCP nel percorso: per ogni GCP trova il WP più vicino e li inserisce subito dopo
+  const combined = [...wps];
+  // Inserimento in ordine inverso per non spostare gli indici
+  const insertions = [];
+  gcpWPs.forEach((gp, gi) => {
+    // Trova il WP più vicino
+    let minD = Infinity, minI = 0;
+    wps.forEach((wp, i) => {
+      const d = (wp.lat - gp.lat) ** 2 + (wp.lng - gp.lng) ** 2;
+      if (d < minD) { minD = d; minI = i; }
+    });
+    insertions.push({ after: minI, wp: gp, gi });
+  });
+  // Ordina per indice decrescente e inserisce
+  insertions.sort((a, b) => b.after - a.after);
+  const finalWPs = [...wps];
+  insertions.forEach(ins => {
+    // Inserisce: discesa poi risalita (già in coppia in gcpWPs)
+    // gcpWPs è già [down0, up0, down1, up1, ...] quindi prendi le coppie
+  });
+
+  // Approccio più semplice: appende i GCP alla fine del 1° passaggio
+  // Il drone finisce le strisciate, poi va su ogni GCP (discende, sosta, risale), poi continua
+  const v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  const rows = [CSV_HDR];
+
+  // Strisciate normali
+  wps.forEach((wp, i) => {
+    const ph = i === 0 ? -1 : tint, nxt = wps[i + 1] || wps[i - 1];
+    let hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
+    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg), csize, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, ph, -1].join(','));
+  });
+
+  // Waypoint GCP (coppie: discesa + risalita)
+  for (let gi = 0; gi < gcpFieldPoints.length; gi++) {
+    const p = gcpFieldPoints[gi];
+    const prevWP = wps[wps.length - 1];
+    // WP avvicinamento a quota missione sopra il GCP (dall'ultimo WP)
+    const hdgToGCP = bearing(prevWP, p);
+    // 1) Discesa alla quota GCP — sosta come actiontype1=0 (stay), param=gcpStay*1000ms
+    const stayMs = gcpStay * 1000;
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP), 0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, tint, -1].join(','));
+    // 2) Risalita alla quota missione
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP), 0, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, -1, -1].join(','));
+  }
+
+  return rows.join('\n');
+}
+
+function exportCSVwithGCP() {
+  if (!missionWPs.length || !result) { toast('⚠ Prima calcola la missione'); return; }
+  if (!gcpFieldPoints.length) { toast('⚠ Nessun GCP acquisito'); sw('gcp'); return; }
+  const { H, gpitch, tint, csize, spd } = result;
+  const csv = buildCSVRowsWithGCP(missionWPs, H, gpitch, tint, csize, spd);
+  dl(csv, missionPrefix()+'_GCP.csv', 'text/csv');
+  toast(`✓ CSV con ${gcpFieldPoints.length} GCP esportato`);
+}
+
+function updateGCPExportBtn() {
+  const row = document.getElementById('export-gcp-row');
+  const cnt = document.getElementById('export-gcp-count');
+  if (!row) return;
+  if (gcpFieldPoints.length > 0 && result) {
+    row.style.display = 'block';
+    if (cnt) cnt.textContent = gcpFieldPoints.length;
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+// ── EXPORT KML ────────────────────────────────────────────────────────────────
+function exportKML(){
+  const gcpFolder = gcpFieldPoints.length
+    ? `<Folder><name>GCP di campo</name>${buildGCPKMLPlacemarks()}</Folder>`
+    : '';
+
+  if(surveyMode==='linear'){
+    if(!linearResult||!linearResultWPs.length){toast('⚠ Prima calcola');return;}
+    const CK=['ff007700','ffcc6600','ff0000cc','ff0000aa'];let sf='';
+    linearResult.fuels.forEach((f,fi)=>{const col=CK[fi]||'ff888888',co=f.wps.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt||linearResult.H}`).join('\n');sf+=`<Style id="b${fi}"><LineStyle><color>${col}</color><width>3</width></LineStyle></Style><Folder><name>Batteria ${fi+1}</name><Placemark><name>Rotta</name><styleUrl>#b${fi}</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${co}</coordinates></LineString></Placemark></Folder>`;});
+    const ac=linearAxis.map(p=>`${p.lng.toFixed(10)},${p.lat.toFixed(10)},0`).join('\n');
+    dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()} — Lineare</name><Style id="ax"><LineStyle><color>ff0000d9</color><width>2</width></LineStyle></Style><Folder><name>Asse</name><Placemark><name>Asse</name><styleUrl>#ax</styleUrl><LineString><altitudeMode>clampToGround</altitudeMode><coordinates>${ac}</coordinates></LineString></Placemark></Folder>${sf}${gcpFolder}</Document></kml>`,missionPrefix()+'_lineare.kml','application/vnd.google-earth.kml+xml');
+    toast('✓ KML lineare'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));return;
+  }
+  if(!missionWPs.length||!result){toast('⚠ Prima calcola');return;}
+  const{H,result2,crosshatch}=result;
+  const c1=missionWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${H}`).join('\n');
+  let xhKML='';if(crosshatch&&result2){const w2=result2.fuels.flatMap(f=>f.wps),c2=w2.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${result2.H}`).join('\n');xhKML=`<Style id="xh"><LineStyle><color>ff0000aa</color><width>2</width></LineStyle></Style><Folder><name>Crosshatch 2°</name><Placemark><name>XH</name><styleUrl>#xh</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c2}</coordinates></LineString></Placemark></Folder>`;}
+  let pKML='';if(result.doPerimeter&&result.perimeterWPs&&result.perimeterWPs.length){const cp=result.perimeterWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt}`).join('\n');pKML=`<Style id="p"><LineStyle><color>ff007700</color><width>2</width></LineStyle></Style><Folder><name>Perimetro</name><Placemark><name>Perim</name><styleUrl>#p</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${cp}</coordinates></LineString></Placemark></Folder>`;}
+  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
+  toast('✓ KML esportato'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));
+}
+
+// ── TAB LUCE ──────────────────────────────────────────────────────────────────
+let luceSurface='acqua_fiume',luceTime='mattino';
+const LUCE_ROWS=[{id:'iso',label:'ISO',ph:'es. 100'},{id:'shutter',label:'Tempo di scatto',ph:'es. 1/500'},{id:'nd',label:'Filtro ND',ph:'es. ND8'},{id:'wb',label:'Bilanciamento bianco',ph:'es. 5500K'},{id:'ev',label:'Compensazione EV',ph:'es. -0.3 EV'},{id:'profilo',label:'Profilo colore',ph:'es. Normal'},{id:'note_gen',label:'Note / avvertenze',ph:'es. Evita riflessi'},{id:'orario',label:'Orario ottimale',ph:'es. 10–12'}];
+function loadLuceTable(){const tb=document.getElementById('luce-tbody');if(!tb)return;tb.innerHTML=LUCE_ROWS.map(r=>{const v=sessionStorage.getItem('luce_'+r.id)||'',n=sessionStorage.getItem('luce_note_'+r.id)||'';return`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:600;color:var(--txt2);font-size:11px;vertical-align:top;white-space:nowrap">${r.label}</td><td style="padding:4px 6px"><input type="text" value="${v}" placeholder="${r.ph}" oninput="sessionStorage.setItem('luce_${r.id}',this.value)" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-size:12px;font-family:var(--mono);background:var(--surf);color:var(--txt);outline:none"></td><td style="padding:4px 6px"><input type="text" value="${n}" placeholder="nota..." oninput="sessionStorage.setItem('luce_note_${r.id}',this.value)" style="width:100%;border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-size:11px;background:var(--surf);color:var(--txt2);outline:none"></td></tr>`;}).join('');}
+function selSurf(btn){document.querySelectorAll('#luce-surface-btns .luce-surf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');luceSurface=btn.dataset.v;}
+function selTime(btn){document.querySelectorAll('#luce-time-btns .luce-surf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');luceTime=btn.dataset.v;}
+function generaPromptLuce(){
+  const H=document.getElementById('alt').value,ovl=document.getElementById('ovl').value,tint=document.getElementById('tint').value,spd=((CAM.fp_h(+H)*(1-ovl/100))/+tint*3.6).toFixed(1);
+  const sL={acqua_fiume:'acqua di fiume (alta riflessione speculare)',vegetazione:'vegetazione / prati / bosco',terreno_nudo:'terreno nudo / cantiere',asfalto_strade:'asfalto / strade',misto:'superficie mista'};
+  const tL={mattino:'mattino (7–10): luce radente, ombre lunghe',mezzogiorno:'mezzogiorno (10–14): luce zenitale',pomeriggio:'pomeriggio (14–17): luce laterale',cielo_coperto:'cielo coperto: luce diffusa'};
+  const prompt=`Sono un geometra e sto pianificando un rilievo fotogrammetrico con DJI Mini 2.\nAllego 2–3 foto della scena.\n\nPARAMETRI VOLO:\n- Quota: ${H} m AGL\n- Velocità: ~${spd} km/h\n- Overlap frontale: ${ovl}%\n- Intervallo scatti: ${tint} s\n- Superficie: ${sL[luceSurface]}\n- Luce: ${tL[luceTime]}\n\nFOTOCAMERA DJI Mini 2 — 1/2.3", f/2.8, 12MP, no D-Log\n\nFornisci le impostazioni manuali ottimali in una tabella:\nParametro | Valore | Motivazione\nRighe: ISO · Tempo di scatto · Filtro ND · Bilanciamento bianco (K) · Comp. EV · Profilo colore · Avvertenze · Orario ottimale`;
+  document.getElementById('luce-prompt-text').textContent=prompt;document.getElementById('luce-prompt-box').style.display='block';toast('✓ Prompt generato');
+}
+function copiaPrompt(){const txt=document.getElementById('luce-prompt-text').textContent;navigator.clipboard.writeText(txt).then(()=>toast('✓ Copiato')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Copiato');});}
+function resetTabella(){LUCE_ROWS.forEach(r=>{sessionStorage.removeItem('luce_'+r.id);sessionStorage.removeItem('luce_note_'+r.id);});loadLuceTable();toast('Tabella azzerata');}
+function copiaTabella(){const rows=LUCE_ROWS.map(r=>{const v=sessionStorage.getItem('luce_'+r.id)||'—',n=sessionStorage.getItem('luce_note_'+r.id)||'';return`${r.label}: ${v}${n?' ('+n+')':''}`;});const txt='IMPOSTAZIONI CAMERA DJI Mini 2\n'+rows.join('\n');navigator.clipboard.writeText(txt).then(()=>toast('✓ Copiato')).catch(()=>{const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ Copiato');});}
+document.addEventListener('DOMContentLoaded',loadLuceTable);
+
+// ── CARTELLA DEDICATA + MISSION HUB ──────────────────────────────────────────
+let _saveFolder = null; // FileSystemDirectoryHandle scelto dall'utente
+
+// Chiede all'utente di scegliere la cartella di salvataggio (una sola volta)
+async function pickSaveFolder() {
+  if (!window.showDirectoryPicker) {
+    toast('⚠ Il tuo browser non supporta la scelta della cartella — i file verranno scaricati normalmente');
+    return null;
+  }
+  try {
+    const dir = await window.showDirectoryPicker({ mode: 'readwrite', id: 'droneplannerSave', startIn: 'downloads' });
+    _saveFolder = dir;
+    // Aggiorna UI
+    const lbl = document.getElementById('folder-label');
+    if (lbl) lbl.textContent = '📁 ' + dir.name;
+    const info = document.getElementById('folder-info');
+    if (info) { info.style.display = 'block'; info.textContent = `I CSV e KML verranno salvati in: ${dir.name}`; }
+    toast(`📁 Cartella impostata: ${dir.name}`);
+    return dir;
+  } catch(e) { return null; }
+}
+
+// Salva il file nella cartella scelta (o fallback download classico)
+async function dl(content, filename, mime) {
+  // Prova File System Access API (Chrome Android / Desktop)
+  if (_saveFolder || window.showDirectoryPicker) {
+    try {
+      const dir = _saveFolder || await pickSaveFolder();
+      if (dir) {
+        const fh = await dir.getFileHandle(filename, { create: true });
+        const w  = await fh.createWritable();
+        await w.write(new Blob([content], { type: mime }));
+        await w.close();
+        toast(`✓ Salvato in ${dir.name}/${filename}`);
+        return;
+      }
+    } catch(e) {
+      // Fallback se qualcosa va storto
+    }
+  }
+  // Fallback classico (download browser)
+  const a = document.createElement('a');
+  const u = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.href = u; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 5000);
+}
+
+// Apre Litchi Mission Hub nella pagina di import
+function openMissionHub() {
+  window.open('https://flylitchi.com/hub', '_blank', 'noopener');
+  toast('📡 Mission Hub aperto — clicca Import per caricare il CSV');
+}
+</script>
+
+<div id="dflight-modal" onclick="if(event.target===this)closeDFlightModal()">
+  <div id="dflight-modal-box">
+    <h2>🚫 Zone Spazio Aereo</h2>
+    <p>Registrati su <a href="https://www.openaip.net" target="_blank">openaip.net</a> → Account → API Keys → incolla qui la chiave.</p>
+    <input type="text" id="dflight-key-input" placeholder="API key OpenAIP" onkeydown="if(event.key==='Enter')saveDFlightKey()">
+    <div class="dflight-modal-btns">
+      <button id="dflight-btn-save" onclick="saveDFlightKey()">✓ Salva e carica</button>
+      <button id="dflight-btn-cancel" onclick="closeDFlightModal()">Annulla</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
