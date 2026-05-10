@@ -419,9 +419,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
           <div class="slbl">Esporta</div>
           <div id="export-btns"></div>
           <button class="btn bk" onclick="exportKML()">⬇ Esporta KML Google Earth</button>
-          <div id="export-gcp-row" style="display:none;margin-top:6px">
-            <button class="btn" onclick="exportCSVwithGCP()" style="background:#d94000;color:#fff;border:none">📍 Esporta CSV con GCP di campo (<span id="export-gcp-count">0</span> punti)</button>
-          </div>
+
           <!-- Cartella salvataggio + Mission Hub -->
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
             <button class="btn bn" id="btn-folder" onclick="pickSaveFolder()" style="flex:1;min-width:140px">
@@ -1508,14 +1506,75 @@ function buildCSVRows(wps,H,gpitch,tint,csize,spd,poiLat,poiLng){
   });
   return rows.join('\n');
 }
-function exportCSV(idx){
-  if(!missionWPs.length||!result)return;const f=result.fuels[idx];
-  if(f.wps.length>LITCHI_WP_MAX)toast(`⚠ B${idx+1}: ${f.wps.length} WP > limite Litchi`);
-  const pfx=missionPrefix(); const nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
-  dl(buildCSVRows(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd),nm,'text/csv');
-  toast(`✓ CSV B${idx+1} (${f.wps.length} WP · ${(f.timeS/60).toFixed(1)} min)`);
+// Costruisce waypoint GCP da inserire nel percorso (avvicinamento + discesa + sosta + risalita)
+function buildGCPRouteWPs(lastWP, H) {
+  if (!gcpFieldPoints.length) return [];
+  var gcpAlt = +document.getElementById('gcp-alt').value;
+  var gcpStay = +document.getElementById('gcp-stay').value;
+  var wps = [];
+  gcpFieldPoints.forEach(function(p, gi) {
+    var prev = gi === 0 ? lastWP : gcpFieldPoints[gi - 1];
+    // WP intermedio a metà strada (quota missione, scatto attivo)
+    wps.push({ lat: (prev.lat + p.lat) / 2, lng: (prev.lng + p.lng) / 2, alt: H, _gcpMid: true });
+    // WP sopra il GCP (quota missione, scatto attivo)
+    wps.push({ lat: p.lat, lng: p.lng, alt: H, _gcpOver: true });
+    // Discesa alla quota GCP con sosta
+    wps.push({ lat: p.lat, lng: p.lng, alt: gcpAlt, _gcpDown: true, _gcpStayMs: gcpStay * 1000 });
+    // Risalita alla quota missione
+    wps.push({ lat: p.lat, lng: p.lng, alt: H, _gcpUp: true });
+  });
+  return wps;
 }
-function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast(`⬇ ${result.fuels.length} CSV…`);}
+
+// Costruisce CSV per una batteria con GCP in coda se è l'ultima batteria
+function buildCSVRowsForBattery(wps, H, gpitch, tint, csize, spd, isLast) {
+  var rows = [CSV_HDR];
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var allWPs = [...wps];
+  if (isLast && gcpFieldPoints.length) {
+    var gcpRoute = buildGCPRouteWPs(wps[wps.length - 1], H);
+    allWPs = allWPs.concat(gcpRoute);
+  }
+  allWPs.forEach(function(wp, i) {
+    var prev = allWPs[i - 1], next = allWPs[i + 1];
+    var hdg = next ? bearing(wp, next) : (prev ? bearing(prev, wp) : 0);
+    var ph, a1t, a1p;
+    if (wp._gcpDown) {
+      // Discesa: sosta, no scatto
+      a1t = 0; a1p = wp._gcpStayMs; ph = -1;
+    } else if (wp._gcpUp) {
+      // Risalita: gimbal, no scatto
+      a1t = 5; a1p = gpitch; ph = -1;
+    } else if (i === 0) {
+      // Primo WP: no scatto
+      a1t = 5; a1p = gpitch; ph = -1;
+    } else {
+      // WP normale o avvicinamento GCP: scatto attivo
+      a1t = 5; a1p = gpitch; ph = tint;
+    }
+    rows.push([
+      wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg),
+      wp._gcpDown || wp._gcpUp ? 0 : csize,
+      0, 2, gpitch, a1t, a1p,
+      -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0, 0, 0, 0, ph, -1
+    ].join(','));
+  });
+  return rows.join('\n');
+}
+
+function exportCSV(idx){
+  if(!missionWPs.length||!result)return;
+  var f=result.fuels[idx];
+  var isLast = idx === result.fuels.length - 1;
+  if(f.wps.length>LITCHI_WP_MAX)toast('⚠ B'+(idx+1)+': '+f.wps.length+' WP > limite Litchi');
+  var pfx=missionPrefix();
+  var nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
+  var gcpNote = isLast && gcpFieldPoints.length ? ' + '+gcpFieldPoints.length+' GCP' : '';
+  dl(buildCSVRowsForBattery(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd,isLast),nm,'text/csv');
+  toast('✓ CSV B'+(idx+1)+' ('+f.wps.length+' WP · '+(f.timeS/60).toFixed(1)+' min'+gcpNote+')');
+}
+function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast('⬇ '+result.fuels.length+' CSV…');}
 function exportCrosshatchCSV(idx){
   if(!result||!result.result2)return;const r2=result.result2,f=r2.fuels[idx];
   dl(buildCSVRows(f.wps,r2.H,r2.gpitch,result.tint,result.csize,r2.spd),missionPrefix()+'_XH_B'+(idx+1)+'.csv','text/csv');
@@ -1754,57 +1813,73 @@ function exportLinearPerimCSV(){
 }
 
 // ── EXPORT CSV CON GCP DI CAMPO ───────────────────────────────────────────────
-function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
-  const gcpAlt = +document.getElementById('gcp-alt').value;
-  const gcpStay = +document.getElementById('gcp-stay').value;
-  const gcpWPs = buildGCPFieldWPs(H, gcpAlt, gcpStay);
-  if (!gcpWPs.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+// Costruisce una riga CSV Litchi per un waypoint
+function gcpCsvRow(lat, lng, alt, hdg, csize, gpitch, actionType, actionParam, tint, spd) {
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var a1t = actionType, a1p = actionParam;
+  // actiontype1=5 (gimbal), actiontype2=0 (stay) o -1
+  return [lat.toFixed(10), lng.toFixed(10), alt, Math.round(hdg), csize, 0, 2,
+    gpitch, a1t, a1p, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+    1, v, 0,0,0,0, tint, -1].join(',');
+}
 
-  // Intercala i GCP nel percorso: per ogni GCP trova il WP più vicino e li inserisce subito dopo
-  const combined = [...wps];
-  // Inserimento in ordine inverso per non spostare gli indici
-  const insertions = [];
-  gcpWPs.forEach((gp, gi) => {
-    // Trova il WP più vicino
-    let minD = Infinity, minI = 0;
-    wps.forEach((wp, i) => {
-      const d = (wp.lat - gp.lat) ** 2 + (wp.lng - gp.lng) ** 2;
-      if (d < minD) { minD = d; minI = i; }
-    });
-    insertions.push({ after: minI, wp: gp, gi });
-  });
-  // Ordina per indice decrescente e inserisce
-  insertions.sort((a, b) => b.after - a.after);
-  const finalWPs = [...wps];
-  insertions.forEach(ins => {
-    // Inserisce: discesa poi risalita (già in coppia in gcpWPs)
-    // gcpWPs è già [down0, up0, down1, up1, ...] quindi prendi le coppie
-  });
-
-  // Approccio più semplice: appende i GCP alla fine del 1° passaggio
-  // Il drone finisce le strisciate, poi va su ogni GCP (discende, sosta, risale), poi continua
-  const v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
-  const rows = [CSV_HDR];
-
-  // Strisciate normali
-  wps.forEach((wp, i) => {
-    const ph = i === 0 ? -1 : tint, nxt = wps[i + 1] || wps[i - 1];
-    let hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
-    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg), csize, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, ph, -1].join(','));
-  });
-
-  // Waypoint GCP (coppie: discesa + risalita)
-  for (let gi = 0; gi < gcpFieldPoints.length; gi++) {
-    const p = gcpFieldPoints[gi];
-    const prevWP = wps[wps.length - 1];
-    // WP avvicinamento a quota missione sopra il GCP (dall'ultimo WP)
-    const hdgToGCP = bearing(prevWP, p);
-    // 1) Discesa alla quota GCP — sosta come actiontype1=0 (stay), param=gcpStay*1000ms
-    const stayMs = gcpStay * 1000;
-    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP), 0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, tint, -1].join(','));
-    // 2) Risalita alla quota missione
-    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP), 0, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, -1, -1].join(','));
+// Interpola N waypoint intermedi tra due punti (incluso B, escluso A)
+function interpWPs(A, B, n, alt) {
+  var pts = [];
+  for (var k = 1; k <= n; k++) {
+    var t = k / (n + 1);
+    pts.push({ lat: A.lat + (B.lat - A.lat) * t, lng: A.lng + (B.lng - A.lng) * t, alt: alt });
   }
+  return pts;
+}
+
+function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
+  var gcpAlt = +document.getElementById('gcp-alt').value;
+  var gcpStay = +document.getElementById('gcp-stay').value;
+  if (!gcpFieldPoints.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var stayMs = gcpStay * 1000;
+  var rows = [CSV_HDR];
+
+  // 1) Tutte le strisciate normali
+  wps.forEach(function(wp, i) {
+    var ph = i === 0 ? -1 : tint;
+    var nxt = wps[i + 1] || wps[i - 1];
+    var hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
+    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, ph, -1].join(','));
+  });
+
+  // 2) Sequenza GCP: avvicinamento con foto + discesa + sosta + risalita
+  var lastWP = wps[wps.length - 1];
+  gcpFieldPoints.forEach(function(p, gi) {
+    var prev = gi === 0 ? lastWP : gcpFieldPoints[gi - 1];
+
+    // Waypoint di avvicinamento intermedio (a meta strada, quota missione, scatto attivo)
+    var midLat = (prev.lat + p.lat) / 2;
+    var midLng = (prev.lng + p.lng) / 2;
+    var hdgToGCP = bearing(prev, p);
+    rows.push([midLat.toFixed(10), midLng.toFixed(10), H, Math.round(hdgToGCP),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, tint, -1].join(','));
+
+    // Waypoint sopra il GCP a quota missione (ancora scatto)
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, tint, -1].join(','));
+
+    // Discesa alla quota GCP con sosta (action: stay stayMs ms)
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP),
+      0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, -1, -1].join(','));
+
+    // Risalita alla quota missione
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP),
+      0, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, -1, -1].join(','));
+  });
 
   return rows.join('\n');
 }
@@ -1849,8 +1924,16 @@ function exportKML(){
   const c1=missionWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${H}`).join('\n');
   let xhKML='';if(crosshatch&&result2){const w2=result2.fuels.flatMap(f=>f.wps),c2=w2.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${result2.H}`).join('\n');xhKML=`<Style id="xh"><LineStyle><color>ff0000aa</color><width>2</width></LineStyle></Style><Folder><name>Crosshatch 2°</name><Placemark><name>XH</name><styleUrl>#xh</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c2}</coordinates></LineString></Placemark></Folder>`;}
   let pKML='';if(result.doPerimeter&&result.perimeterWPs&&result.perimeterWPs.length){const cp=result.perimeterWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt}`).join('\n');pKML=`<Style id="p"><LineStyle><color>ff007700</color><width>2</width></LineStyle></Style><Folder><name>Perimetro</name><Placemark><name>Perim</name><styleUrl>#p</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${cp}</coordinates></LineString></Placemark></Folder>`;}
-  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
-  toast('✓ KML esportato'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));
+  // Percorso verso i GCP nel KML
+  let gcpRouteKML='';
+  if(gcpFieldPoints.length&&missionWPs.length){
+    const lastWP=missionWPs[missionWPs.length-1];
+    const gcpRt=buildGCPRouteWPs(lastWP,H);
+    const rcrd=[lastWP,...gcpRt].map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt||H}`).join('\n');
+    gcpRouteKML=`<Style id="gcpr"><LineStyle><color>ff00aaff</color><width>2.5</width></LineStyle></Style><Folder><name>Percorso GCP</name><Placemark><name>Rotta verso GCP</name><styleUrl>#gcpr</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${rcrd}</coordinates></LineString></Placemark></Folder>`;
+  }
+  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpRouteKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
+  toast('✓ KML esportato'+(gcpFieldPoints.length?' + '+gcpFieldPoints.length+' GCP':''));
 }
 
 // ── TAB LUCE ──────────────────────────────────────────────────────────────────
