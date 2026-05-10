@@ -419,9 +419,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
           <div class="slbl">Esporta</div>
           <div id="export-btns"></div>
           <button class="btn bk" onclick="exportKML()">⬇ Esporta KML Google Earth</button>
-          <div id="export-gcp-row" style="display:none;margin-top:6px">
-            <button class="btn" onclick="exportCSVwithGCP()" style="background:#d94000;color:#fff;border:none">📍 Esporta CSV con GCP di campo (<span id="export-gcp-count">0</span> punti)</button>
-          </div>
+
           <!-- Cartella salvataggio + Mission Hub -->
           <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
             <button class="btn bn" id="btn-folder" onclick="pickSaveFolder()" style="flex:1;min-width:140px">
@@ -455,20 +453,24 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(
         <div class="ib" style="font-size:11px">💡 Il drone: scende alla quota GCP → sosta → risale alla quota missione e continua. La sosta accumula scatti ravvicinati.</div>
 
         <div class="slbl">Acquisizione GCP</div>
-        <button class="btn bp" id="btn-acq-gcp" onclick="acquireGCP()" style="background:#d94000;border-color:#d94000;font-size:14px">📍 Acquisisci GCP — usa posizione attuale</button>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="btn bp" id="btn-acq-gcp" onclick="acquireGCP()" style="flex:1;background:#d94000;border-color:#d94000;font-size:13px">📍 GPS — posizione attuale</button>
+          <button class="btn bp" id="btn-acq-gcp-map" onclick="toggleGCPMapMode()" style="flex:1;background:#1a5ca0;border-color:#1a5ca0;font-size:13px">🗺 Mappa — tocca punto</button>
+        </div>
         <div id="gcp-gps-status" class="ib" style="font-size:11px;display:none"></div>
+        <div id="gcp-map-status" class="ib" style="font-size:11px;display:none;background:#e8f0ff;border-color:#1a5ca0;color:#1a3c70">🗺 Modalità mappa attiva — tocca un punto sulla mappa per aggiungere un GCP. Premi di nuovo per disattivare.</div>
 
         <!-- Pannello foto immediata — appare dopo acquisizione -->
         <div id="gcp-photo-prompt" style="display:none;background:#fff8f0;border:2px solid #e07000;border-radius:var(--r);padding:10px;margin-top:8px">
           <div style="font-size:12px;font-weight:700;color:#a04000;margin-bottom:8px">📷 GCP <span id="gcp-photo-prompt-idx"></span> — allega foto adesso?</div>
           <div style="display:flex;gap:8px">
-            <button onclick="triggerPhotoForLast()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer">📷 Sì — scatta / scegli ora</button>
+            <label for="gcp-photo-input" onclick="setGCPPhotoTargetLast();dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:none;background:#e07000;color:#fff;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center">📷 Sì — scatta / scegli ora</label>
             <button onclick="dismissPhotoPrompt()" style="flex:1;padding:9px;border-radius:var(--r);border:2px solid var(--border);background:var(--surf);color:var(--txt2);font-size:12px;font-weight:600;cursor:pointer">Dopo</button>
           </div>
         </div>
 
         <!-- Input file nascosto — riutilizzabile per qualsiasi GCP -->
-        <input type="file" id="gcp-photo-input" accept="image/*" style="display:none" onchange="onGCPPhotoSelected(this)">
+        <input type="file" id="gcp-photo-input" accept="image/*" style="position:fixed;top:-9999px;left:-9999px;opacity:0;width:1px;height:1px" onchange="onGCPPhotoSelected(this)">
 
         <div class="slbl">GCP acquisiti — <span id="gcp-count">0</span></div>
         <div id="gcp-list" style="border:2px solid var(--border);border-radius:var(--r);background:var(--surf);max-height:260px;overflow-y:auto;margin-bottom:8px">
@@ -574,15 +576,34 @@ const bingAerialL = new BingLayer('', {
   attribution:'© <a href="https://www.microsoft.com/maps">Microsoft Bing Maps</a>'
 });
 
+// Ortofoto Geoportale Nazionale PCN 2012 (AGEA, 0.5m, copertura nazionale)
+const ortoNazL = L.tileLayer.wms('https://wms.pcn.minambiente.it/ogc?map=/ms_ogc/WMS_v1.3/raster/ortofoto_colore_12.map', {
+  layers: 'OI.ORTOIMMAGINI.2012',
+  format: 'image/jpeg',
+  transparent: false,
+  version: '1.3.0',
+  maxZoom: 19,
+  attribution: '© Geoportale Nazionale MASE — Ortofoto AGEA 2012'
+});
+
+// OpenTopoMap (già presente come ctrL ma aggiungiamo alias esplicito)
+
+
 const BASEMAPS=[
   {layer:osmL,        label:'Mappa',     icon:'🗺', title:'Mappa (CartoDB)'},
   {layer:satL,        label:'Satellite', icon:'🛰', title:'Satellite (Google)'},
   {layer:bingAerialL, label:'Bing',      icon:'🅱', title:'Bing Maps Aerial (Microsoft)'},
   {layer:ctrL,        label:'Topo',      icon:'📐', title:'Carta Topografica (OpenTopoMap)'},
+  {layer:ortoNazL,    label:'Ortofoto',  icon:'🛩', title:'Ortofoto Nazionale PCN 2012 (AGEA 0.5m)'},
 ];
+
+
+
 let basemapIdx=0;
 osmL.addTo(map);
 document.getElementById('basemap-label').textContent=BASEMAPS[0].label;
+// Ripristina ultima missione salvata
+setTimeout(restoreMission, 400);
 
 function cycleBasemap(){
   const prev=BASEMAPS[basemapIdx];
@@ -602,6 +623,91 @@ function cycleBasemap(){
 function toggleSat(){
   if(basemapIdx===1){cycleBasemap();}else{while(basemapIdx!==1)cycleBasemap();}
 }
+
+// ── SALVATAGGIO / RIPRISTINO MISSIONE (localStorage) ─────────────────────────
+const LS_KEY = 'dsp_mission_v8';
+
+function saveMission() {
+  try {
+    const data = {
+      ts: Date.now(),
+      surveyMode,
+      vertices: vertices.map(v => ({lat: v.lat, lng: v.lng})),
+      linearAxisRaw: typeof linearAxis !== 'undefined' ? linearAxis.map(p => ({lat: p.lat, lng: p.lng})) : [],
+      params: {
+        alt:    document.getElementById('alt')   ? +document.getElementById('alt').value   : 60,
+        ovl:    document.getElementById('ovl')   ? +document.getElementById('ovl').value   : 80,
+        ovt:    document.getElementById('ovt')   ? +document.getElementById('ovt').value   : 70,
+        spd:    document.getElementById('spd')   ? +document.getElementById('spd').value   : 30,
+        csize:  document.getElementById('csize') ? +document.getElementById('csize').value : 2,
+        gpitch: document.getElementById('gpitch')? +document.getElementById('gpitch').value: -90,
+        pAlt:   document.getElementById('p-alt') ? +document.getElementById('p-alt').value : 40,
+        gcpAlt: document.getElementById('gcp-alt')  ? +document.getElementById('gcp-alt').value  : 20,
+        gcpStay:document.getElementById('gcp-stay') ? +document.getElementById('gcp-stay').value : 8,
+      },
+      gcpFieldPoints: gcpFieldPoints.map(p => ({
+        lat: p.lat, lng: p.lng, acc: p.acc, idx: p.idx,
+        _fromMap: p._fromMap || false,
+        photoName: p.photoName || null,
+        photo: p.photo || null  // base64 — già compressa a ~60-100KB
+      })),
+      missionPrefix: _missionPrefix
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+  } catch(e) { /* quota exceeded o privato — ignora */ }
+}
+
+function restoreMission() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || !data.vertices || !data.vertices.length) return;
+
+    // Ripristina parametri slider
+    const p = data.params || {};
+    const setSlider = (id, val, displayId, suffix) => {
+      const el = document.getElementById(id);
+      if (el && val !== undefined) { el.value = val; if (displayId) onRng(id, displayId, suffix); }
+    };
+    setSlider('alt',    p.alt,    'alt-v',    ' m');
+    setSlider('ovl',    p.ovl,    'ovl-v',    '%');
+    setSlider('ovt',    p.ovt,    'ovt-v',    '%');
+    setSlider('spd',    p.spd,    'spd-v',    ' km/h');
+    setSlider('csize',  p.csize,  'csize-v',  ' m');
+    setSlider('gpitch', p.gpitch, 'gpitch-v', '°');
+    setSlider('p-alt',  p.pAlt,   'p-alt-v',  ' m');
+    setSlider('gcp-alt', p.gcpAlt,  'gcp-alt-v',  ' m');
+    setSlider('gcp-stay',p.gcpStay, 'gcp-stay-v', ' s');
+
+    // Ripristina GCP
+    if (data.gcpFieldPoints && data.gcpFieldPoints.length) {
+      gcpFieldPoints = data.gcpFieldPoints;
+      renderGCPFieldList();
+      renderGCPFieldMap();
+    }
+
+    // Ripristina prefisso
+    if (data.missionPrefix) _missionPrefix = data.missionPrefix;
+
+    // Ripristina poligono / asse lineare
+    if (data.surveyMode === 'linear' && data.linearAxisRaw && data.linearAxisRaw.length >= 2) {
+      // Attiva modalità lineare e ridisegna
+      if (typeof setLinearMode === 'function') setLinearMode();
+      data.linearAxisRaw.forEach(p => { if (typeof addLP === 'function') addLP(p.lat, p.lng); });
+    } else if (data.vertices && data.vertices.length >= 3) {
+      data.vertices.forEach(v => addV(v.lat, v.lng));
+      // Chiude il poligono
+      if (typeof closePolygon === 'function') closePolygon();
+      else { drawing = false; closePolyLine(); }
+    }
+
+    toast('✓ Missione ripristinata');
+  } catch(e) { /* dati corrotti — ignora */ }
+}
+
+// Chiama saveMission dopo ogni calcolo
+// (verrà chiamata esplicitamente alla fine di compute())
 
 // ── IMPRONTE FOTOGRAFICHE ─────────────────────────────────────────────────────
 let footprintOn=false,footprintLayer=null;
@@ -830,6 +936,7 @@ function acquireGCP() {
       renderGCPFieldList();
       renderGCPFieldMap();
       updateGCPExportBtn();
+      saveMission();
       status.textContent = `✓ GCP ${idx} acquisito — precisione ±${acc} m`;
       status.style.background = '#f0fff4'; status.style.borderColor = '#1a7a00'; status.style.color = '#1a5c00';
       btn.disabled = false; btn.textContent = '📍 Acquisisci GCP — usa posizione attuale';
@@ -850,27 +957,83 @@ function acquireGCP() {
 
 function renderGCPFieldList() {
   const list = document.getElementById('gcp-list');
-  const empty = document.getElementById('gcp-empty');
   document.getElementById('gcp-count').textContent = gcpFieldPoints.length;
+  list.innerHTML = '';
   if (!gcpFieldPoints.length) {
-    list.innerHTML = '';
-    empty.style.display = 'block';
-    list.appendChild(empty);
+    const e = document.createElement('div');
+    e.style.cssText = 'padding:12px;text-align:center;color:var(--dim);font-size:12px';
+    e.textContent = 'Nessun GCP acquisito';
+    list.appendChild(e);
     return;
   }
-  empty.style.display = 'none';
-  list.innerHTML = gcpFieldPoints.map((p, i) => `
-    <div style="padding:8px 9px;border-bottom:1px solid var(--surf2)">
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px">
-        <span style="background:#d94000;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0">${p.idx}</span>
-        <span style="flex:1;font-family:var(--mono);font-size:11px">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}<br><span style="color:var(--dim)">±${p.acc} m</span></span>
-        <button onclick="triggerPhotoFor(${i})" title="Allega foto" style="padding:4px 8px;border-radius:6px;border:1.5px solid #e07000;background:${p.photo?'#e07000':'#fff8f0'};color:${p.photo?'#fff':'#a04000'};font-size:13px;cursor:pointer;flex-shrink:0">${p.photo?'📷✓':'📷'}</button>
-        <button onclick="removeGCPField(${i})" style="padding:3px 8px;border-radius:6px;border:1.5px solid #d94000;background:#fff5f0;color:#d94000;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
-      </div>
-      ${p.photo ? `<div style="margin-top:6px;border-radius:6px;overflow:hidden;max-height:120px;display:flex;align-items:center;justify-content:center;background:#000">
-        <img src="${p.photo}" style="max-width:100%;max-height:120px;object-fit:contain;display:block" onclick="viewGCPPhoto(${i})">
-      </div>` : ''}
-    </div>`).join('');
+  gcpFieldPoints.forEach(function(p, i) {
+    var row = document.createElement('div');
+    row.style.cssText = 'padding:8px 9px;border-bottom:1px solid var(--surf2)';
+    var top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px';
+    var badge = document.createElement('span');
+    badge.style.cssText = 'background:#d94000;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;flex-shrink:0';
+    badge.textContent = p.idx;
+    var coords = document.createElement('span');
+    coords.style.cssText = 'flex:1;font-family:var(--mono);font-size:11px';
+    var precTxt = p._fromMap ? '<span style="color:#1a5ca0">🗺 da mappa</span>' : ('\u00B1' + p.acc + ' m');
+    coords.innerHTML = p.lat.toFixed(6) + ', ' + p.lng.toFixed(6) + '<br>' + precTxt;
+    // Input file dedicato per questo GCP
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.style.cssText = 'display:none';
+    (function(idx) {
+      inp.addEventListener('change', function() {
+        if (!this.files || !this.files[0]) return;
+        var file = this.files[0];
+        var rd = new FileReader();
+        rd.onload = function(ev) {
+          var im = new Image();
+          im.onload = function() {
+            var MAX = 900, w = im.width, h = im.height;
+            if (w > MAX || h > MAX) {
+              if (w >= h) { h = Math.round(h*MAX/w); w = MAX; }
+              else { w = Math.round(w*MAX/h); h = MAX; }
+            }
+            var cv = document.createElement('canvas');
+            cv.width = w; cv.height = h;
+            cv.getContext('2d').drawImage(im, 0, 0, w, h);
+            var comp = cv.toDataURL('image/jpeg', 0.82);
+            gcpFieldPoints[idx].photo = comp;
+            gcpFieldPoints[idx].photoName = file.name;
+            var kb = Math.round(comp.length*0.75/1024);
+            renderGCPFieldList();
+            toast('\u2713 Foto GCP ' + gcpFieldPoints[idx].idx + ' (' + kb + ' KB)');
+          };
+          im.src = ev.target.result;
+        };
+        rd.readAsDataURL(file);
+        this.value = '';
+      });
+    })(i);
+    var lbl = document.createElement('label');
+    lbl.style.cssText = 'padding:4px 9px;border-radius:6px;border:1.5px solid #e07000;background:' + (p.photo ? '#e07000' : '#fff8f0') + ';color:' + (p.photo ? '#fff' : '#a04000') + ';font-size:13px;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;gap:3px';
+    lbl.title = 'Allega foto';
+    lbl.textContent = p.photo ? '\u{1F4F7}\u2713' : '\u{1F4F7}';
+    lbl.appendChild(inp);
+    var del = document.createElement('button');
+    del.style.cssText = 'padding:3px 8px;border-radius:6px;border:1.5px solid #d94000;background:#fff5f0;color:#d94000;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0';
+    del.textContent = '\u2715';
+    (function(idx) { del.addEventListener('click', function() { removeGCPField(idx); }); })(i);
+    top.appendChild(badge); top.appendChild(coords); top.appendChild(lbl); top.appendChild(del);
+    row.appendChild(top);
+    if (p.photo) {
+      var th = document.createElement('div');
+      th.style.cssText = 'margin-top:6px;border-radius:6px;overflow:hidden;max-height:120px;display:flex;align-items:center;justify-content:center;background:#000';
+      var im2 = document.createElement('img');
+      im2.src = p.photo;
+      im2.style.cssText = 'max-width:100%;max-height:120px;object-fit:contain;display:block;cursor:pointer';
+      (function(idx) { im2.addEventListener('click', function() { viewGCPPhoto(idx); }); })(i);
+      th.appendChild(im2); row.appendChild(th);
+    }
+    list.appendChild(row);
+  });
 }
 
 function removeGCPField(i) {
@@ -880,6 +1043,42 @@ function removeGCPField(i) {
   renderGCPFieldMap();
   updateGCPExportBtn();
   toast('GCP rimosso');
+}
+
+// ── MODALITÀ MAPPA GCP ───────────────────────────────────────────────────────
+let _gcpMapMode = false;
+
+function toggleGCPMapMode() {
+  _gcpMapMode = !_gcpMapMode;
+  const btn = document.getElementById('btn-acq-gcp-map');
+  const status = document.getElementById('gcp-map-status');
+  if (_gcpMapMode) {
+    btn.style.background = '#e07000';
+    btn.style.borderColor = '#e07000';
+    btn.textContent = '🗺 Mappa attiva — tocca per disattivare';
+    status.style.display = 'block';
+    map.getContainer().style.cursor = 'crosshair';
+    toast('🗺 Tocca la mappa per aggiungere un GCP');
+  } else {
+    btn.style.background = '#1a5ca0';
+    btn.style.borderColor = '#1a5ca0';
+    btn.textContent = '🗺 Mappa — tocca punto';
+    status.style.display = 'none';
+    map.getContainer().style.cursor = '';
+  }
+}
+
+// Handler click mappa per GCP — registrato una volta sola
+function onMapClickGCP(e) {
+  if (!_gcpMapMode) return;
+  const lat = e.latlng.lat, lng = e.latlng.lng;
+  const idx = gcpFieldPoints.length + 1;
+  gcpFieldPoints.push({ lat, lng, acc: 0, idx, photo: null, _fromMap: true });
+  renderGCPFieldList();
+  renderGCPFieldMap();
+  updateGCPExportBtn();
+  showPhotoPrompt(idx);
+  toast('🗺 GCP ' + idx + ' aggiunto da mappa');
 }
 
 // ── FOTO GCP ──────────────────────────────────────────────────────────────────
@@ -899,18 +1098,18 @@ function dismissPhotoPrompt() {
   _gcpPhotoTargetIdx = null;
 }
 
-function triggerPhotoForLast() {
-  // Photo per il GCP appena acquisito (pannello immediato)
+// Setta il target GCP prima che il label nativo apra l'input
+function setGCPPhotoTargetLast() {
   _gcpPhotoTargetIdx = gcpFieldPoints.length - 1;
-  dismissPhotoPrompt();
-  document.getElementById('gcp-photo-input').click();
 }
 
-function triggerPhotoFor(listIdx) {
-  // Photo per un GCP specifico dalla lista
+function setGCPPhotoTarget(listIdx) {
   _gcpPhotoTargetIdx = listIdx;
-  document.getElementById('gcp-photo-input').click();
 }
+
+// Mantenute per compatibilità
+function triggerPhotoForLast() { setGCPPhotoTargetLast(); dismissPhotoPrompt(); }
+function triggerPhotoFor(listIdx) { setGCPPhotoTarget(listIdx); }
 
 function onGCPPhotoSelected(input) {
   if (!input.files || !input.files[0]) return;
@@ -1193,6 +1392,7 @@ map.on('click',e=>{
   if(drawing){addV(e.latlng.lat,e.latlng.lng);}
   else if(linearDrawing){addLP(e.latlng.lat,e.latlng.lng);}
   else if(measureOn){addMeasurePoint(e.latlng.lat,e.latlng.lng);}
+  else if(_gcpMapMode){onMapClickGCP(e);}
 });
 map.on('dblclick',e=>{
   if(measureOn&&measurePts.length>=3){L.DomEvent.stop(e);closeMeasureArea();}
@@ -1414,6 +1614,7 @@ function compute(){
   document.getElementById('res-empty').style.display='none';document.getElementById('res-content').style.display='block';sw('results');
   toast(`✓ ${wps.length} WP · ${lines.length} str · ${fuels.length} bat`+(crosshatch&&result2?` + ${result2.nStrips} XH`:''));
   updateGCPExportBtn();
+  saveMission();
 }
 
 // ── RENDER FUEL PLAN ──────────────────────────────────────────────────────────
@@ -1453,14 +1654,75 @@ function buildCSVRows(wps,H,gpitch,tint,csize,spd,poiLat,poiLng){
   });
   return rows.join('\n');
 }
-function exportCSV(idx){
-  if(!missionWPs.length||!result)return;const f=result.fuels[idx];
-  if(f.wps.length>LITCHI_WP_MAX)toast(`⚠ B${idx+1}: ${f.wps.length} WP > limite Litchi`);
-  const pfx=missionPrefix(); const nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
-  dl(buildCSVRows(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd),nm,'text/csv');
-  toast(`✓ CSV B${idx+1} (${f.wps.length} WP · ${(f.timeS/60).toFixed(1)} min)`);
+// Costruisce waypoint GCP da inserire nel percorso (avvicinamento + discesa + sosta + risalita)
+function buildGCPRouteWPs(lastWP, H) {
+  if (!gcpFieldPoints.length) return [];
+  var gcpAlt = +document.getElementById('gcp-alt').value;
+  var gcpStay = +document.getElementById('gcp-stay').value;
+  var wps = [];
+  gcpFieldPoints.forEach(function(p, gi) {
+    var prev = gi === 0 ? lastWP : gcpFieldPoints[gi - 1];
+    // WP intermedio a metà strada (quota missione, scatto attivo)
+    wps.push({ lat: (prev.lat + p.lat) / 2, lng: (prev.lng + p.lng) / 2, alt: H, _gcpMid: true });
+    // WP sopra il GCP (quota missione, scatto attivo)
+    wps.push({ lat: p.lat, lng: p.lng, alt: H, _gcpOver: true });
+    // Discesa alla quota GCP con sosta
+    wps.push({ lat: p.lat, lng: p.lng, alt: gcpAlt, _gcpDown: true, _gcpStayMs: gcpStay * 1000 });
+    // Risalita alla quota missione
+    wps.push({ lat: p.lat, lng: p.lng, alt: H, _gcpUp: true });
+  });
+  return wps;
 }
-function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast(`⬇ ${result.fuels.length} CSV…`);}
+
+// Costruisce CSV per una batteria con GCP in coda se è l'ultima batteria
+function buildCSVRowsForBattery(wps, H, gpitch, tint, csize, spd, isLast) {
+  var rows = [CSV_HDR];
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var allWPs = [...wps];
+  if (isLast && gcpFieldPoints.length) {
+    var gcpRoute = buildGCPRouteWPs(wps[wps.length - 1], H);
+    allWPs = allWPs.concat(gcpRoute);
+  }
+  allWPs.forEach(function(wp, i) {
+    var prev = allWPs[i - 1], next = allWPs[i + 1];
+    var hdg = next ? bearing(wp, next) : (prev ? bearing(prev, wp) : 0);
+    var ph, a1t, a1p;
+    if (wp._gcpDown) {
+      // Discesa: sosta, no scatto
+      a1t = 0; a1p = wp._gcpStayMs; ph = -1;
+    } else if (wp._gcpUp) {
+      // Risalita: gimbal, no scatto
+      a1t = 5; a1p = gpitch; ph = -1;
+    } else if (i === 0) {
+      // Primo WP: no scatto
+      a1t = 5; a1p = gpitch; ph = -1;
+    } else {
+      // WP normale o avvicinamento GCP: scatto attivo
+      a1t = 5; a1p = gpitch; ph = tint;
+    }
+    rows.push([
+      wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg),
+      wp._gcpDown || wp._gcpUp ? 0 : csize,
+      0, 2, gpitch, a1t, a1p,
+      -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0, 0, 0, 0, ph, -1
+    ].join(','));
+  });
+  return rows.join('\n');
+}
+
+function exportCSV(idx){
+  if(!missionWPs.length||!result)return;
+  var f=result.fuels[idx];
+  var isLast = idx === result.fuels.length - 1;
+  if(f.wps.length>LITCHI_WP_MAX)toast('⚠ B'+(idx+1)+': '+f.wps.length+' WP > limite Litchi');
+  var pfx=missionPrefix();
+  var nm=result.fuels.length===1?(pfx+'.csv'):(pfx+'_B'+(idx+1)+'.csv');
+  var gcpNote = isLast && gcpFieldPoints.length ? ' + '+gcpFieldPoints.length+' GCP' : '';
+  dl(buildCSVRowsForBattery(f.wps,result.H,result.gpitch,result.tint,result.csize,result.spd,isLast),nm,'text/csv');
+  toast('✓ CSV B'+(idx+1)+' ('+f.wps.length+' WP · '+(f.timeS/60).toFixed(1)+' min'+gcpNote+')');
+}
+function exportAllCSV(){if(!result)return;result.fuels.forEach((_,i)=>setTimeout(()=>exportCSV(i),i*400));toast('⬇ '+result.fuels.length+' CSV…');}
 function exportCrosshatchCSV(idx){
   if(!result||!result.result2)return;const r2=result.result2,f=r2.fuels[idx];
   dl(buildCSVRows(f.wps,r2.H,r2.gpitch,result.tint,result.csize,r2.spd),missionPrefix()+'_XH_B'+(idx+1)+'.csv','text/csv');
@@ -1699,57 +1961,73 @@ function exportLinearPerimCSV(){
 }
 
 // ── EXPORT CSV CON GCP DI CAMPO ───────────────────────────────────────────────
-function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
-  const gcpAlt = +document.getElementById('gcp-alt').value;
-  const gcpStay = +document.getElementById('gcp-stay').value;
-  const gcpWPs = buildGCPFieldWPs(H, gcpAlt, gcpStay);
-  if (!gcpWPs.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+// Costruisce una riga CSV Litchi per un waypoint
+function gcpCsvRow(lat, lng, alt, hdg, csize, gpitch, actionType, actionParam, tint, spd) {
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var a1t = actionType, a1p = actionParam;
+  // actiontype1=5 (gimbal), actiontype2=0 (stay) o -1
+  return [lat.toFixed(10), lng.toFixed(10), alt, Math.round(hdg), csize, 0, 2,
+    gpitch, a1t, a1p, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+    1, v, 0,0,0,0, tint, -1].join(',');
+}
 
-  // Intercala i GCP nel percorso: per ogni GCP trova il WP più vicino e li inserisce subito dopo
-  const combined = [...wps];
-  // Inserimento in ordine inverso per non spostare gli indici
-  const insertions = [];
-  gcpWPs.forEach((gp, gi) => {
-    // Trova il WP più vicino
-    let minD = Infinity, minI = 0;
-    wps.forEach((wp, i) => {
-      const d = (wp.lat - gp.lat) ** 2 + (wp.lng - gp.lng) ** 2;
-      if (d < minD) { minD = d; minI = i; }
-    });
-    insertions.push({ after: minI, wp: gp, gi });
-  });
-  // Ordina per indice decrescente e inserisce
-  insertions.sort((a, b) => b.after - a.after);
-  const finalWPs = [...wps];
-  insertions.forEach(ins => {
-    // Inserisce: discesa poi risalita (già in coppia in gcpWPs)
-    // gcpWPs è già [down0, up0, down1, up1, ...] quindi prendi le coppie
-  });
-
-  // Approccio più semplice: appende i GCP alla fine del 1° passaggio
-  // Il drone finisce le strisciate, poi va su ogni GCP (discende, sosta, risale), poi continua
-  const v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
-  const rows = [CSV_HDR];
-
-  // Strisciate normali
-  wps.forEach((wp, i) => {
-    const ph = i === 0 ? -1 : tint, nxt = wps[i + 1] || wps[i - 1];
-    let hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
-    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg), csize, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, ph, -1].join(','));
-  });
-
-  // Waypoint GCP (coppie: discesa + risalita)
-  for (let gi = 0; gi < gcpFieldPoints.length; gi++) {
-    const p = gcpFieldPoints[gi];
-    const prevWP = wps[wps.length - 1];
-    // WP avvicinamento a quota missione sopra il GCP (dall'ultimo WP)
-    const hdgToGCP = bearing(prevWP, p);
-    // 1) Discesa alla quota GCP — sosta come actiontype1=0 (stay), param=gcpStay*1000ms
-    const stayMs = gcpStay * 1000;
-    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP), 0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, tint, -1].join(','));
-    // 2) Risalita alla quota missione
-    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP), 0, 0, 2, gpitch, 5, gpitch, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, -1, 0, 1, v, 0, 0, 0, 0, -1, -1].join(','));
+// Interpola N waypoint intermedi tra due punti (incluso B, escluso A)
+function interpWPs(A, B, n, alt) {
+  var pts = [];
+  for (var k = 1; k <= n; k++) {
+    var t = k / (n + 1);
+    pts.push({ lat: A.lat + (B.lat - A.lat) * t, lng: A.lng + (B.lng - A.lng) * t, alt: alt });
   }
+  return pts;
+}
+
+function buildCSVRowsWithGCP(wps, H, gpitch, tint, csize, spd) {
+  var gcpAlt = +document.getElementById('gcp-alt').value;
+  var gcpStay = +document.getElementById('gcp-stay').value;
+  if (!gcpFieldPoints.length) return buildCSVRows(wps, H, gpitch, tint, csize, spd);
+
+  var v = Math.min(15, Math.max(0.5, spd)).toFixed(1);
+  var stayMs = gcpStay * 1000;
+  var rows = [CSV_HDR];
+
+  // 1) Tutte le strisciate normali
+  wps.forEach(function(wp, i) {
+    var ph = i === 0 ? -1 : tint;
+    var nxt = wps[i + 1] || wps[i - 1];
+    var hdg = nxt ? (i < wps.length - 1 ? bearing(wp, nxt) : bearing(wps[i - 1], wp)) : 0;
+    rows.push([wp.lat.toFixed(10), wp.lng.toFixed(10), wp.alt || H, Math.round(hdg),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, ph, -1].join(','));
+  });
+
+  // 2) Sequenza GCP: avvicinamento con foto + discesa + sosta + risalita
+  var lastWP = wps[wps.length - 1];
+  gcpFieldPoints.forEach(function(p, gi) {
+    var prev = gi === 0 ? lastWP : gcpFieldPoints[gi - 1];
+
+    // Waypoint di avvicinamento intermedio (a meta strada, quota missione, scatto attivo)
+    var midLat = (prev.lat + p.lat) / 2;
+    var midLng = (prev.lng + p.lng) / 2;
+    var hdgToGCP = bearing(prev, p);
+    rows.push([midLat.toFixed(10), midLng.toFixed(10), H, Math.round(hdgToGCP),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, tint, -1].join(','));
+
+    // Waypoint sopra il GCP a quota missione (ancora scatto)
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP),
+      csize, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, tint, -1].join(','));
+
+    // Discesa alla quota GCP con sosta (action: stay stayMs ms)
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), gcpAlt, Math.round(hdgToGCP),
+      0, 0, 2, gpitch, 0, stayMs, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, -1, -1].join(','));
+
+    // Risalita alla quota missione
+    rows.push([p.lat.toFixed(10), p.lng.toFixed(10), H, Math.round(hdgToGCP),
+      0, 0, 2, gpitch, 5, gpitch, -1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,-1,0,
+      1, v, 0,0,0,0, -1, -1].join(','));
+  });
 
   return rows.join('\n');
 }
@@ -1794,8 +2072,16 @@ function exportKML(){
   const c1=missionWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${H}`).join('\n');
   let xhKML='';if(crosshatch&&result2){const w2=result2.fuels.flatMap(f=>f.wps),c2=w2.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${result2.H}`).join('\n');xhKML=`<Style id="xh"><LineStyle><color>ff0000aa</color><width>2</width></LineStyle></Style><Folder><name>Crosshatch 2°</name><Placemark><name>XH</name><styleUrl>#xh</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c2}</coordinates></LineString></Placemark></Folder>`;}
   let pKML='';if(result.doPerimeter&&result.perimeterWPs&&result.perimeterWPs.length){const cp=result.perimeterWPs.map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt}`).join('\n');pKML=`<Style id="p"><LineStyle><color>ff007700</color><width>2</width></LineStyle></Style><Folder><name>Perimetro</name><Placemark><name>Perim</name><styleUrl>#p</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${cp}</coordinates></LineString></Placemark></Folder>`;}
-  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
-  toast('✓ KML esportato'+(gcpFieldPoints.length?` + ${gcpFieldPoints.length} GCP`:''));
+  // Percorso verso i GCP nel KML
+  let gcpRouteKML='';
+  if(gcpFieldPoints.length&&missionWPs.length){
+    const lastWP=missionWPs[missionWPs.length-1];
+    const gcpRt=buildGCPRouteWPs(lastWP,H);
+    const rcrd=[lastWP,...gcpRt].map(w=>`${w.lng.toFixed(10)},${w.lat.toFixed(10)},${w.alt||H}`).join('\n');
+    gcpRouteKML=`<Style id="gcpr"><LineStyle><color>ff00aaff</color><width>2.5</width></LineStyle></Style><Folder><name>Percorso GCP</name><Placemark><name>Rotta verso GCP</name><styleUrl>#gcpr</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${rcrd}</coordinates></LineString></Placemark></Folder>`;
+  }
+  dl(`<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${missionPrefix()}</name><Style id="r"><LineStyle><color>ff0000cc</color><width>3</width></LineStyle></Style><Folder><name>1° passaggio (${H}m)</name><Placemark><name>Rotta</name><styleUrl>#r</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${c1}</coordinates></LineString></Placemark></Folder>${xhKML}${pKML}${gcpRouteKML}${gcpFolder}</Document></kml>`,missionPrefix()+'.kml','application/vnd.google-earth.kml+xml');
+  toast('✓ KML esportato'+(gcpFieldPoints.length?' + '+gcpFieldPoints.length+' GCP':''));
 }
 
 // ── TAB LUCE ──────────────────────────────────────────────────────────────────
